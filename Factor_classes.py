@@ -99,15 +99,18 @@ class ComponentsAnalysis:
 
 
 class APCA:
-    def __init__(self, returns, convergence_threshold=1e-3, max_iterations=1000):
+    def __init__(self, returns, convergence_threshold=1e-5, max_iterations=1000):
         self.returns = returns
         self.R = returns.values
         self.t, self.n = returns.shape
-        self.m = self.number_factors(0.95)
         self.convergence_threshold = convergence_threshold
         self.max_iterations = max_iterations
         self.Q_tilde = self.calculate_covariance_matrix()
         self.eigenvalues, self.eigenvectors = self.perform_eigendecomposition()
+        self.explained_variance_ratio = self.calculate_explained_variance_ratio()
+        self.cumulative_explained_variance = self.calculate_cumulative_explained_variance()
+        self.m = self.number_factors(0.95)
+        self.U_m_final, self.F_final, self.B_final = self.iterative_estimation()
     
     def calculate_covariance_matrix(self):
         return (1 / self.t) * self.R @ self.R.T
@@ -117,6 +120,12 @@ class APCA:
     
     def number_factors(self, threshold):
         return np.searchsorted(self.cumulative_explained_variance, threshold) + 1
+    
+    def calculate_explained_variance_ratio(self):
+        return self.eigenvalues[::-1] / np.sum(self.eigenvalues)
+    
+    def calculate_cumulative_explained_variance(self):
+        return np.cumsum(self.explained_variance_ratio)
     
     def iterative_estimation(self):
         previous_Delta_squared = np.inf
