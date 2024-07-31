@@ -99,7 +99,7 @@ class ComponentsAnalysis:
 
 
 class APCA:
-    def __init__(self, returns, convergence_threshold=1e-5, max_iterations=1000):
+    def __init__(self, returns, convergence_threshold=1e-3, max_iterations=1000):
         self.returns = returns
         self.R = returns.values
         self.t, self.n = returns.shape
