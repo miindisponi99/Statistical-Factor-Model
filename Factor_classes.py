@@ -99,16 +99,15 @@ class ComponentsAnalysis:
 
 
 class APCA:
-    def __init__(self, returns, m=16, convergence_threshold=1e-6, max_iterations=1000):
+    def __init__(self, returns, convergence_threshold=1e-3, max_iterations=1000):
         self.returns = returns
         self.R = returns.values
         self.t, self.n = returns.shape
-        self.m = m
+        self.m = self.number_factors(0.95)
         self.convergence_threshold = convergence_threshold
         self.max_iterations = max_iterations
         self.Q_tilde = self.calculate_covariance_matrix()
         self.eigenvalues, self.eigenvectors = self.perform_eigendecomposition()
-        self.U_m_final, self.F_final, self.B_final = self.iterative_estimation()
     
     def calculate_covariance_matrix(self):
         return (1 / self.t) * self.R @ self.R.T
@@ -116,17 +115,21 @@ class APCA:
     def perform_eigendecomposition(self):
         return np.linalg.eigh(self.Q_tilde)
     
-    def iterative_estimation(self):
+    def number_factors(self, threshold):
+        return np.searchsorted(self.cumulative_explained_variance, threshold) + 1
+    
+    def iterative_estimation(self, returns):
         previous_Delta_squared = np.inf
+        R = returns.values
 
         for iteration in range(self.max_iterations):
             U_m = self.eigenvectors[:, -self.m:]
             F = U_m.T # Factor returns
-            B = self.R.T @ U_m # Factor exposures
-            Gamma = self.R.T - B @ F # Specific returns
+            B = R.T @ U_m # Factor exposures
+            Gamma = R.T - B @ F # Specific returns
             Delta_squared = (1 / self.t) * np.diag(Gamma @ Gamma.T) # Specific covariance matrix
 
-            max_difference = np.max(np.abs(Delta_squared - previous_Delta_squared))
+            max_difference = np.abs(Delta_squared - previous_Delta_squared)
             print(f"Iteration {iteration + 1}, Max difference: {max_difference}")
 
             if np.all(np.abs(Delta_squared - previous_Delta_squared) < self.convergence_threshold):
@@ -135,7 +138,7 @@ class APCA:
 
             previous_Delta_squared = Delta_squared
             Delta_inv = np.diag(1 / np.sqrt(Delta_squared))
-            R_star = Delta_inv @ self.R.T
+            R_star = Delta_inv @ R.T
             Q_tilde_star = (1 / self.n) * R_star.T @ R_star
             self.eigenvalues, self.eigenvectors = np.linalg.eigh(Q_tilde_star)
 
@@ -144,6 +147,6 @@ class APCA:
 
         U_m_final = self.eigenvectors[:, -self.m:]
         F_final = U_m_final.T
-        B_final = self.R.T @ U_m_final
+        B_final = R.T @ U_m_final
 
         return U_m_final, F_final, B_final
