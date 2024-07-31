@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from scipy.optimize import minimize
+
 class StockData:
     def __init__(self, start_date, end_date):
         self.index_ticker = "FTSEMIB.MI"
@@ -137,11 +139,8 @@ class APCA:
             Gamma = self.R.T - B @ F # Specific returns
             Delta_squared = (1 / self.t) * np.diag(Gamma @ Gamma.T) # Specific covariance matrix
 
-            max_difference = np.max(np.abs(Delta_squared - previous_Delta_squared))
-            print(f"Iteration {iteration + 1}, Max difference: {max_difference}")
-
             if np.all(np.abs(Delta_squared - previous_Delta_squared) < self.convergence_threshold):
-                print(f"Converged after {iteration + 1} iterations")
+                #print(f"Converged after {iteration + 1} iterations")
                 break
 
             previous_Delta_squared = Delta_squared
