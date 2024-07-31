@@ -118,18 +118,17 @@ class APCA:
     def number_factors(self, threshold):
         return np.searchsorted(self.cumulative_explained_variance, threshold) + 1
     
-    def iterative_estimation(self, returns):
+    def iterative_estimation(self):
         previous_Delta_squared = np.inf
-        R = returns.values
 
         for iteration in range(self.max_iterations):
             U_m = self.eigenvectors[:, -self.m:]
             F = U_m.T # Factor returns
-            B = R.T @ U_m # Factor exposures
-            Gamma = R.T - B @ F # Specific returns
+            B = self.R.T @ U_m # Factor exposures
+            Gamma = self.R.T - B @ F # Specific returns
             Delta_squared = (1 / self.t) * np.diag(Gamma @ Gamma.T) # Specific covariance matrix
 
-            max_difference = np.abs(Delta_squared - previous_Delta_squared)
+            max_difference = np.max(np.abs(Delta_squared - previous_Delta_squared))
             print(f"Iteration {iteration + 1}, Max difference: {max_difference}")
 
             if np.all(np.abs(Delta_squared - previous_Delta_squared) < self.convergence_threshold):
@@ -138,7 +137,7 @@ class APCA:
 
             previous_Delta_squared = Delta_squared
             Delta_inv = np.diag(1 / np.sqrt(Delta_squared))
-            R_star = Delta_inv @ R.T
+            R_star = Delta_inv @ self.R.T
             Q_tilde_star = (1 / self.n) * R_star.T @ R_star
             self.eigenvalues, self.eigenvectors = np.linalg.eigh(Q_tilde_star)
 
@@ -147,6 +146,6 @@ class APCA:
 
         U_m_final = self.eigenvectors[:, -self.m:]
         F_final = U_m_final.T
-        B_final = R.T @ U_m_final
+        B_final = self.R.T @ U_m_final
 
         return U_m_final, F_final, B_final
