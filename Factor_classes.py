@@ -317,24 +317,18 @@ class RollingAPCAStrategy:
         return portfolio_capital_series
 
     def evaluate_strategies(self, index_returns):
-        index_cum_returns = {}
-        portfolio_cum_returns = {}
+        index_returns_series = pd.Series(index_returns, index=self.data_returns.index[self.window_size:])
+        portfolio_returns_dict = {}
 
         for method in self.weight_methods:
             self.portfolio_capital_dict[method] = self.rolling_apca_strategy(weight_method=method)
-
-        test_index_capital = pd.Series(index_returns, index=self.portfolio_capital_dict[self.weight_methods[0]].index) * self.initial_capital + self.initial_capital
-        cumulative_capital_dict = {}
-        for method, capital in self.portfolio_capital_dict.items():
-            cumulative_capital_dict[method] = capital
-            portfolio_cum_returns[method] = capital / self.initial_capital - 1
-
-        cumulative_index_capital = test_index_capital
-        index_cum_returns = cumulative_index_capital / self.initial_capital - 1
+            portfolio_returns_dict[method] = self.portfolio_capital_dict[method].pct_change().dropna()
 
         plt.figure(figsize=(12, 6))
-        for method, cumulative_capital in cumulative_capital_dict.items():
+        for method, capital in self.portfolio_capital_dict.items():
+            cumulative_capital = (capital / self.initial_capital)
             plt.plot(cumulative_capital, label=f'Portfolio Capital ({method})')
+        cumulative_index_capital = (index_returns_series * self.initial_capital + self.initial_capital) / self.initial_capital
         plt.plot(cumulative_index_capital, label='Index Capital', linewidth=2, linestyle='--')
         plt.xticks(rotation=45)
         plt.xlabel('Date')
@@ -344,7 +338,7 @@ class RollingAPCAStrategy:
         plt.grid(True)
         plt.show()
 
-        return index_cum_returns, portfolio_cum_returns
+        return index_returns_series, portfolio_returns_dict
 
 
 class FinancialMetrics:
