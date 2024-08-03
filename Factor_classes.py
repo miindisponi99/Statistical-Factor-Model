@@ -33,13 +33,13 @@ class StockData:
         return tickers_json['tickers']
     
     def download_data(self, tickers):
-        return yf.download(tickers, start=self.start_date, end=self.end_date)['Open']
+        return yf.download(tickers, start=self.start_date, end=self.end_date, progress=False)['Open']
     
     def download_volume_data(self, tickers):
-        return yf.download(tickers, start=self.start_date, end=self.end_date)['Volume']
+        return yf.download(tickers, start=self.start_date, end=self.end_date, progress=False)['Volume']
     
     def download_index_data(self, index_ticker):
-        return yf.download(index_ticker, start=self.start_date, end=self.end_date)['Open']
+        return yf.download(index_ticker, start=self.start_date, end=self.end_date, progress=False)['Open']
     
     def resample_data(self, data):
         return data.resample('ME').first()
@@ -58,7 +58,7 @@ class CorrelationMatrix:
     
     def plot_heatmap(self):
         plt.figure(figsize=(20, 16))
-        sns.heatmap(self.correlation_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, center=0)
+        sns.heatmap(self.correlation_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, center=0, fmt='.1f')
         plt.title('Correlation Heatmap of Returns')
         plt.show()
 
@@ -185,7 +185,7 @@ class PortfolioWeights:
         
         return result.x
     
-    def momentum_based_weights(self, lookback_period=12):
+    def momentum_based_weights(self, lookback_period=4):
         momentum = np.mean(self.factor_returns[-lookback_period:], axis=0)
         positive_momentum = momentum.clip(min=0)
         weights = positive_momentum / np.sum(positive_momentum)
@@ -235,13 +235,12 @@ class PortfolioWeights:
     
 
 class RollingAPCAStrategy:
-    def __init__(self, data_returns, window_size, max_iterations, initial_capital=10000, transaction_cost=0.001, slippage=0.001):
+    def __init__(self, data_returns, window_size, max_iterations, transaction_cost=0.001, slippage=0.001):
         self.data_returns = data_returns
         self.window_size = window_size
         self.max_iterations = max_iterations
         self.weight_methods = ['equal', 'inverse_volatility', 'risk_parity', 'momentum', 'tail_risk_parity', 'random_forest']
-        self.portfolio_capital_dict = {}
-        self.initial_capital = initial_capital
+        self.portfolio_returns_dict = {}
         self.transaction_cost = transaction_cost
         self.slippage = slippage
 
@@ -249,8 +248,7 @@ class RollingAPCAStrategy:
         train_factor_returns = []
         train_factor_loadings = []
         test_index = []
-        portfolio_capital = []
-        capital = self.initial_capital
+        portfolio_returns = []
 
         for start in range(len(self.data_returns) - self.window_size):
             long_return = 0
@@ -302,38 +300,34 @@ class RollingAPCAStrategy:
                 short_return += np.dot(short_assets.values.flatten(), short_weights) * weights[i]
 
             portfolio_return = long_return - short_return
+            transaction_costs = self.transaction_cost
+            slippage_costs = self.slippage
+            net_portfolio_return = portfolio_return - transaction_costs - slippage_costs
+            portfolio_returns.append(net_portfolio_return)
 
-            # Adjust for transaction costs and slippage
-            transaction_costs = self.transaction_cost * capital
-            slippage_costs = self.slippage * capital
-            net_portfolio_return = (1 + portfolio_return) * capital - transaction_costs - slippage_costs
-
-            # Update capital
-            capital = net_portfolio_return
-
-            portfolio_capital.append(capital)
-
-        portfolio_capital_series = pd.Series(portfolio_capital, index=test_index)
-        return portfolio_capital_series
+        portfolio_returns_series = pd.Series(portfolio_returns, index=test_index)
+        return portfolio_returns_series
 
     def evaluate_strategies(self, index_returns):
         index_returns_series = pd.Series(index_returns, index=self.data_returns.index[self.window_size:])
         portfolio_returns_dict = {}
 
         for method in self.weight_methods:
-            self.portfolio_capital_dict[method] = self.rolling_apca_strategy(weight_method=method)
-            portfolio_returns_dict[method] = self.portfolio_capital_dict[method].pct_change().dropna()
+            self.portfolio_returns_dict[method] = self.rolling_apca_strategy(weight_method=method)
+            portfolio_returns_dict[method] = self.portfolio_returns_dict[method].dropna()
 
         plt.figure(figsize=(12, 6))
-        for method, capital in self.portfolio_capital_dict.items():
-            cumulative_capital = (capital / self.initial_capital)
-            plt.plot(cumulative_capital, label=f'Portfolio Capital ({method})')
-        cumulative_index_capital = (index_returns_series * self.initial_capital + self.initial_capital) / self.initial_capital
-        plt.plot(cumulative_index_capital, label='Index Capital', linewidth=2, linestyle='--')
+        for method, returns in self.portfolio_returns_dict.items():
+            cumulative_returns = (1 + returns).cumprod()
+            cumulative_returns = pd.Series([1] + cumulative_returns.tolist(), index=[self.data_returns.index[self.window_size-1]] + cumulative_returns.index.tolist())
+            plt.plot(cumulative_returns, label=f'Portfolio Returns ({method})')
+        cumulative_index_returns = (1 + index_returns_series).cumprod()
+        cumulative_index_returns = pd.Series([1] + cumulative_index_returns.tolist(), index=[self.data_returns.index[self.window_size-1]] + cumulative_index_returns.index.tolist())
+        plt.plot(cumulative_index_returns, label='Index Returns', linewidth=2, linestyle='--')
         plt.xticks(rotation=45)
         plt.xlabel('Date')
-        plt.ylabel('Capital')
-        plt.title('Capital Appreciation of Portfolio vs Index')
+        plt.ylabel('Cumulative Returns')
+        plt.title('Cumulative Returns of Portfolio vs Index')
         plt.legend()
         plt.grid(True)
         plt.show()
