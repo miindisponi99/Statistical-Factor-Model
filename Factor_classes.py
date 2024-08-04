@@ -167,7 +167,7 @@ class APCA:
 class PortfolioWeights:
     def __init__(self, factor_returns):
         self.factor_returns = factor_returns
-    
+
     def risk_parity_weights(self):
         cov_matrix = np.cov(self.factor_returns.T)
         inv_vols = 1 / np.sqrt(np.diag(cov_matrix))
@@ -232,7 +232,7 @@ class PortfolioWeights:
         weights = model.predict(np.mean(X, axis=0).reshape(1, -1))[0]
         weights = weights / np.sum(weights)
         return weights
-    
+
 
 class RollingAPCAStrategy:
     def __init__(self, data_returns, window_size, max_iterations, transaction_cost=0.001, slippage=0.001):
