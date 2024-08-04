@@ -1,4 +1,5 @@
 import json
+import math
 
 import yfinance as yf
 import numpy as np
@@ -239,7 +240,7 @@ class RollingAPCAStrategy:
         self.data_returns = data_returns
         self.window_size = window_size
         self.max_iterations = max_iterations
-        self.weight_methods = ['equal', 'inverse_volatility', 'risk_parity', 'momentum', 'tail_risk_parity', 'random_forest']
+        self.weight_methods = ['equal', 'risk_parity', 'momentum', 'tail_risk_parity', 'random_forest']
         self.portfolio_returns_dict = {}
         self.transaction_cost = transaction_cost
         self.slippage = slippage
@@ -267,9 +268,6 @@ class RollingAPCAStrategy:
             # Select the weighting method
             if weight_method == 'equal':
                 weights = np.ones(factor_loadings.shape[1]) / factor_loadings.shape[1]
-            elif weight_method == 'inverse_volatility':
-                inv_vols = 1 / factor_volatility
-                weights = inv_vols / np.sum(inv_vols)
             elif weight_method == 'risk_parity':
                 weights = portfolio_weights.risk_parity_weights()
             elif weight_method == 'momentum':
@@ -332,17 +330,60 @@ class RollingAPCAStrategy:
         plt.grid(True)
         plt.show()
 
+        # Plot Drawdowns
+        plt.figure(figsize=(12, 6))
+        for method, returns in portfolio_returns_dict.items():
+            drawdown = FinancialMetrics.drawdown(returns)["Drawdown"]
+            plt.plot(drawdown, label=f'Portfolio Drawdown ({method})')
+        index_drawdown = FinancialMetrics.drawdown(index_returns_series)["Drawdown"]
+        plt.plot(index_drawdown, label='Index Drawdown', linewidth=2, linestyle='--')
+        plt.xticks(rotation=45)
+        plt.xlabel('Date')
+        plt.ylabel('Drawdown')
+        plt.title('Drawdowns of Portfolio vs Index')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+        # Plot heatmap of monthly returns
+        def monthly_returns_heatmap(returns, title, ax):
+            returns_df = returns.to_frame(name="Returns")
+            returns_df.index = pd.to_datetime(returns_df.index)
+            returns_df["Year"] = returns_df.index.year
+            returns_df["Month"] = returns_df.index.month
+            monthly_returns = returns_df.pivot_table(index="Year", columns="Month", values="Returns", aggfunc='sum')
+            
+            sns.heatmap(monthly_returns, annot=True, fmt=".2%", cmap='RdYlGn', center=0, cbar=False, ax=ax)
+            ax.set_title(title)
+            ax.set_xlabel('Month')
+            ax.set_ylabel('Year')
+
+        num_methods = len(portfolio_returns_dict)
+        num_cols = 2
+        num_rows = math.ceil(num_methods / num_cols)
+        fig, axes = plt.subplots(num_rows, num_cols, figsize=(18, 8 * num_rows))
+        axes = axes.flatten()
+
+        for ax, (method, returns) in zip(axes, portfolio_returns_dict.items()):
+            monthly_returns_heatmap(returns, title=f'Monthly Returns for Portfolio ({method})', ax=ax)
+
+        for i in range(len(portfolio_returns_dict), len(axes)):
+            fig.delaxes(axes[i])
+
+        plt.tight_layout()
+        plt.show()
+
         return index_returns_series, portfolio_returns_dict
 
 
 class FinancialMetrics:
     @staticmethod
-    def _annualize(metric_func, r, periods_per_year, **kwargs):
+    def annualize(metric_func, r, periods_per_year, **kwargs):
         result = r.aggregate(metric_func, periods_per_year=periods_per_year, **kwargs)
         return result
 
     @staticmethod
-    def _risk_free_adjusted_returns(r, riskfree_rate, periods_per_year):
+    def risk_free_adjusted_returns(r, riskfree_rate, periods_per_year):
         rf_per_period = (1 + riskfree_rate)**(1 / periods_per_year) - 1
         return r - rf_per_period
 
@@ -441,6 +482,9 @@ class FinancialMetrics:
         """
         compounded_growth = (1 + r).prod()
         n_periods = r.shape[0]
+        if compounded_growth <= 0:
+            return 0
+        
         return compounded_growth**(periods_per_year / n_periods) - 1
 
     @staticmethod
@@ -455,7 +499,7 @@ class FinancialMetrics:
         """
         Computes the annualized Sharpe ratio of a set of returns
         """
-        excess_ret = FinancialMetrics._risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
+        excess_ret = FinancialMetrics.risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
         ann_ex_ret = FinancialMetrics.annualize_rets(excess_ret, periods_per_year)
         ann_vol = FinancialMetrics.annualize_vol(r, periods_per_year)
         return ann_ex_ret / ann_vol if ann_vol != 0 else 0
@@ -472,7 +516,7 @@ class FinancialMetrics:
         """
         Compute the annualized Sortino Ratio of a set of returns
         """
-        excess_ret = FinancialMetrics._risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
+        excess_ret = FinancialMetrics.risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
         ann_ex_ret = FinancialMetrics.annualize_rets(excess_ret, periods_per_year)
         neg_rets = excess_ret[excess_ret < 0]
         ann_vol = FinancialMetrics.annualize_vol(neg_rets, periods_per_year)
@@ -483,7 +527,7 @@ class FinancialMetrics:
         """
         Compute the annualized Calmar Ratio of a set of returns
         """
-        excess_ret = FinancialMetrics._risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
+        excess_ret = FinancialMetrics.risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
         ann_ex_ret = FinancialMetrics.annualize_rets(excess_ret, periods_per_year)
         max_dd = abs(FinancialMetrics.drawdown(r).Drawdown.min())
         return ann_ex_ret / max_dd if max_dd != 0 else 0
@@ -494,7 +538,7 @@ class FinancialMetrics:
         Compute the annualized Burke Ratio of a set of returns
         If "modified" is True, then the modified Burke Ratio is returned
         """
-        excess_ret = FinancialMetrics._risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
+        excess_ret = FinancialMetrics.risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
         ann_ex_ret = FinancialMetrics.annualize_rets(excess_ret, periods_per_year)
         sum_dwn = np.sqrt(np.sum((FinancialMetrics.drawdown(r).Drawdown)**2))
         if not modified:
@@ -522,17 +566,47 @@ class FinancialMetrics:
         return drawdown.min()
 
     @staticmethod
-    def summary_stats(r, riskfree_rate=0.03, periods_per_year=12):
+    def beta(r, market):
+        cov_matrix = np.cov(r, market)
+        beta = cov_matrix[0, 1] / cov_matrix[1, 1]
+        return beta
+
+    @staticmethod
+    def treynor_ratio(r, market, riskfree_rate, periods_per_year):
+        excess_ret = FinancialMetrics.risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
+        ann_ex_ret = FinancialMetrics.annualize_rets(excess_ret, periods_per_year)
+        beta = FinancialMetrics.beta(r, market)
+        return ann_ex_ret / beta if beta != 0 else 0
+
+    @staticmethod
+    def tracking_error(r, market):
+        difference = r - market
+        return difference.std()
+
+    @staticmethod
+    def information_ratio(r, market, periods_per_year):
+        diff_rets = r - market
+        ann_diff_rets = FinancialMetrics.annualize_rets(diff_rets, periods_per_year)
+        tracking_err = FinancialMetrics.tracking_error(r, market)
+        return ann_diff_rets / tracking_err if tracking_err != 0 else 0
+
+    @staticmethod
+    def tail_ratio(r):
+        tail_ratio = np.percentile(r, 95) / abs(np.percentile(r, 5))
+        return tail_ratio
+    
+    @staticmethod
+    def summary_stats(r, market=None, riskfree_rate=0.03, periods_per_year=12):
         """
         Return a DataFrame that contains aggregated summary stats for the returns in the columns of r
         """
-        ann_r = FinancialMetrics._annualize(FinancialMetrics.annualize_rets, r, periods_per_year)
-        ann_vol = FinancialMetrics._annualize(FinancialMetrics.annualize_vol, r, periods_per_year)
-        semidev = FinancialMetrics._annualize(FinancialMetrics.semideviation, r, periods_per_year)
-        ann_sr = FinancialMetrics._annualize(FinancialMetrics.sharpe_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
-        ann_cr = FinancialMetrics._annualize(FinancialMetrics.calmar_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
-        ann_br = FinancialMetrics._annualize(FinancialMetrics.burke_ratio, r, periods_per_year, riskfree_rate=riskfree_rate, modified=True)
-        ann_sortr = FinancialMetrics._annualize(FinancialMetrics.sortino_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
+        ann_r = FinancialMetrics.annualize(FinancialMetrics.annualize_rets, r, periods_per_year)
+        ann_vol = FinancialMetrics.annualize(FinancialMetrics.annualize_vol, r, periods_per_year)
+        semidev = FinancialMetrics.annualize(FinancialMetrics.semideviation, r, periods_per_year)
+        ann_sr = FinancialMetrics.annualize(FinancialMetrics.sharpe_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
+        ann_cr = FinancialMetrics.annualize(FinancialMetrics.calmar_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
+        ann_br = FinancialMetrics.annualize(FinancialMetrics.burke_ratio, r, periods_per_year, riskfree_rate=riskfree_rate, modified=True)
+        ann_sortr = FinancialMetrics.annualize(FinancialMetrics.sortino_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
         dd = r.aggregate(lambda r: FinancialMetrics.drawdown(r).Drawdown.min())
         skew = r.aggregate(FinancialMetrics.skewness)
         kurt = r.aggregate(FinancialMetrics.kurtosis)
@@ -540,7 +614,20 @@ class FinancialMetrics:
         cf_var5 = r.aggregate(FinancialMetrics.var_gaussian, modified=True)
         hist_cvar5 = r.aggregate(FinancialMetrics.cvar_historic)
         rovar5 = r.aggregate(FinancialMetrics.rovar, periods_per_year=periods_per_year)
-        np_wdd_ratio = r.aggregate(lambda returns: FinancialMetrics.net_profit(returns) / -FinancialMetrics.worst_drawdown(returns))
+        np_wdd_ratio = r.aggregate(lambda returns: FinancialMetrics.net_profit(returns) / - FinancialMetrics.worst_drawdown(returns))
+        tail_ratio = r.aggregate(FinancialMetrics.tail_ratio)
+        if market is not None:
+            market_series = market.squeeze()
+            beta = r.aggregate(FinancialMetrics.beta, market=market_series)
+            treynor = r.aggregate(FinancialMetrics.treynor_ratio, market=market_series, riskfree_rate=riskfree_rate, periods_per_year=periods_per_year)
+            tracking_err = r.aggregate(FinancialMetrics.tracking_error, market=market_series)
+            info_ratio = r.aggregate(FinancialMetrics.information_ratio, market=market_series, periods_per_year=periods_per_year)
+        else:
+            beta = pd.Series(1 * len(r.columns), index=r.columns)
+            treynor = pd.Series(0 * len(r.columns), index=r.columns)
+            tracking_err = pd.Series(0 * len(r.columns), index=r.columns)
+            info_ratio = pd.Series(0 * len(r.columns), index=r.columns)
+
         return pd.DataFrame({
             "Annualized Return": round(ann_r, 4),
             "Annualized Volatility": round(ann_vol, 4),
@@ -556,5 +643,10 @@ class FinancialMetrics:
             "Calmar Ratio": round(ann_cr, 4),
             "Modified Burke Ratio": round(ann_br, 4),
             "Max Drawdown": round(dd, 4),
-            "Net Profit to Worst Drawdown": round(np_wdd_ratio, 4)
+            "Net Profit to Worst Drawdown": round(np_wdd_ratio, 4),
+            "Beta": round(beta, 4),
+            "Treynor Ratio": round(treynor, 4),
+            "Tracking Error": round(tracking_err, 4),
+            "Information Ratio": round(info_ratio, 4),
+            "Tail Ratio": round(tail_ratio, 4)
         })
