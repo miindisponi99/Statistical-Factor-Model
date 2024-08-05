@@ -216,21 +216,40 @@ class PortfolioWeights:
         tscv = TimeSeriesSplit(n_splits=5)
         val_mse_list = []
         train_mse_list = []
+        n_estimators_grid = [50, 100, 200, 500]
+        max_depth_grid = [5, 10, 15, None]      
+        best_val_mse = float('inf')
+        best_n_estimators = None
+        best_max_depth = None
+        for n_estimators in n_estimators_grid:
+            for max_depth in max_depth_grid:
+                val_mse_list = []
+                train_mse_list = []
+                for train_index, val_index in tscv.split(X):
+                    X_train, X_val = X[train_index], X[val_index]
+                    y_train, y_val = y[train_index], y[val_index]
+                    model = RandomForestRegressor(n_estimators=n_estimators, 
+                                                max_depth=max_depth, 
+                                                random_state=random_seed)
+                    model.fit(X_train, y_train)
+                    train_predictions = model.predict(X_train)
+                    val_predictions = model.predict(X_val)
+                    train_mse = mean_squared_error(y_train, train_predictions)
+                    val_mse = mean_squared_error(y_val, val_predictions)
+                    train_mse_list.append(train_mse)
+                    val_mse_list.append(val_mse)
+                mean_val_mse = np.mean(val_mse_list)
+                if mean_val_mse < best_val_mse:
+                    best_val_mse = mean_val_mse
+                    best_n_estimators = n_estimators
+                    best_max_depth = max_depth
 
-        for train_index, val_index in tscv.split(X):
-            X_train, X_val = X[train_index], X[val_index]
-            y_train, y_val = y[train_index], y[val_index]
-            model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=random_seed)
-            model.fit(X_train, y_train)
-            train_predictions = model.predict(X_train)
-            val_predictions = model.predict(X_val)
-            train_mse = mean_squared_error(y_train, train_predictions)
-            val_mse = mean_squared_error(y_val, val_predictions)
-            train_mse_list.append(train_mse)
-            val_mse_list.append(val_mse)
-
-        model.fit(X, y)
-        weights = model.predict(np.mean(X, axis=0).reshape(1, -1))[0]
+        best_model = RandomForestRegressor(n_estimators=best_n_estimators, 
+                                        max_depth=best_max_depth, 
+                                        random_state=random_seed)
+        best_model.fit(X, y)
+        #weights = model.predict(np.mean(X, axis=0).reshape(1, -1))[0]
+        weights = best_model.feature_importances_
         weights = weights / np.sum(weights)
         return weights
 
@@ -287,6 +306,7 @@ class RollingAPCAStrategy:
                 weighted_average_factor_returns = np.zeros(factor_loadings.shape[0])
                 for j in range(factor_returns.shape[1]):
                     weighted_average_factor_returns += factor_loadings[:, i] * factor_returns[i, j] / self.window_size
+                    # no vabbe stai usando la miaaaa che finance bro che sono
                 asset_ranks = np.argsort(np.argsort(weighted_average_factor_returns))
                 top_quintile = asset_ranks >= (len(asset_ranks) * 0.90)
                 bottom_quintile = asset_ranks <= (len(asset_ranks) * 0.10)
