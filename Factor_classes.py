@@ -101,7 +101,7 @@ class ComponentsAnalysis:
         plt.xlabel('Number of Principal Components')
         plt.ylabel('Cumulative Explained Variance')
         plt.title('Cumulative Explained Variance')
-        plt.axhline(y=0.95, color='r', linestyle='--')
+        plt.axhline(y=0.90, color='r', linestyle='--')
         plt.grid(True)
         plt.show()
 
@@ -117,7 +117,7 @@ class APCA:
         self.eigenvalues, self.eigenvectors = self.perform_eigendecomposition()
         self.explained_variance_ratio = self.calculate_explained_variance_ratio()
         self.cumulative_explained_variance = self.calculate_cumulative_explained_variance()
-        self.m = self.number_factors(0.95)
+        self.m = self.number_factors(0.90)
         self.U_m_final, self.F_final, self.B_final = self.iterative_estimation()
     
     def calculate_covariance_matrix(self):
@@ -279,7 +279,6 @@ class RollingAPCAStrategy:
             test_returns = self.data_returns.iloc[end:end + 1]
             factor_model = APCA(train_returns, max_iterations=self.max_iterations)
             factor_returns = factor_model.F_final  # m x t
-            factor_volatility = np.std(factor_returns, axis=0)
             factor_loadings = factor_model.B_final  # n x m
 
             portfolio_weights = PortfolioWeights(factor_returns)
@@ -301,12 +300,12 @@ class RollingAPCAStrategy:
             train_factor_returns.append(factor_returns)
             train_factor_loadings.append(factor_loadings)
             test_index.append(test_returns.index[0])
-
+            
             for i in range(factor_loadings.shape[1]):
                 weighted_average_factor_returns = np.zeros(factor_loadings.shape[0])
                 for j in range(factor_returns.shape[1]):
-                    weighted_average_factor_returns += factor_loadings[:, i] * factor_returns[i, j] / self.window_size
-                    # no vabbe stai usando la miaaaa che finance bro che sono
+                    weighted_average_factor_returns += factor_loadings[:, i] * factor_returns[i, j]
+                weighted_average_factor_returns /= self.window_size
                 asset_ranks = np.argsort(np.argsort(weighted_average_factor_returns))
                 top_quintile = asset_ranks >= (len(asset_ranks) * 0.90)
                 bottom_quintile = asset_ranks <= (len(asset_ranks) * 0.10)
