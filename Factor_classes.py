@@ -260,9 +260,8 @@ class PortfolioWeights:
         train_mse_list = []
         # n_estimators_grid = [5, 10, 20, 30, 40, 50]
         # max_depth_grid = [5, 10, 20, 30, 40, 50]
-        n_estimators_grid = [100]  
-        max_depth_grid = [10]  # Adjusted for more depth
-        min_samples_split_grid = [10]  # Add min_samples_split as a hyperparameter
+        n_estimators_grid = [50]
+        max_depth_grid = [1]
         best_val_mse = float("inf")
         best_params = {}
 
@@ -302,6 +301,8 @@ class PortfolioWeights:
             #min_samples_split=best_params["min_samples_split"],
             random_state=random_seed,
         )
+        print(best_n_estimators)
+        print(best_max_depth)
         best_model.fit(X, y)
 
         # Use feature importances as weights
@@ -329,7 +330,7 @@ class RollingAPCAStrategy:
             "risk_parity",
             "momentum",
             "tail_risk_parity",
-             "random_forest"
+            # "random_forest",
         ]
         self.portfolio_returns_dict = {}
         self.transaction_cost = transaction_cost
@@ -354,11 +355,12 @@ class RollingAPCAStrategy:
             factor_loadings = factor_model.B_final  # n x m
             factor_specific = factor_model.Gamma_final  # n x t
 
-            portfolio_weights = PortfolioWeights(factor_returns)
-
+            portfolio_weights = PortfolioWeights(factor_returns.T)
+            
             # Select the weighting method
             if weight_method == "equal":
                 weights = np.ones(factor_loadings.shape[1]) / factor_loadings.shape[1]
+                print(f'')
             elif weight_method == "risk_parity":
                 weights = portfolio_weights.risk_parity_weights()
             elif weight_method == "momentum":
@@ -369,8 +371,6 @@ class RollingAPCAStrategy:
                 weights = portfolio_weights.random_forest_weights()
             else:
                 raise ValueError(f"Unknown weight method: {weight_method}")
-            
-            all_weights.append(weights)
 
             train_factor_returns.append(factor_returns)
             train_factor_loadings.append(factor_loadings)
