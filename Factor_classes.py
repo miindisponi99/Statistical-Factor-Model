@@ -405,7 +405,6 @@ class RollingAPCAStrategy:
             net_portfolio_return = portfolio_return - transaction_costs - slippage_costs
             portfolio_returns.append(net_portfolio_return)
 
-        average_weights = pd.DataFrame(all_weights).mean()
         portfolio_returns_series = pd.Series(portfolio_returns, index=test_index)
         return portfolio_returns_series, np.concatenate(all_weights, axis=0)
 
