@@ -363,39 +363,20 @@ class RollingAPCAStrategy:
             train_factor_loadings.append(factor_loadings)
             test_index.append(test_returns.index[0])
 
-            # for i in range(factor_loadings.shape[1]):
-            #     weighted_average_factor_returns = np.zeros(factor_loadings.shape[0])
-            #     for j in range(factor_returns.shape[1]):
-            #         weighted_average_factor_returns += (
-            #             factor_loadings[:, i] * factor_returns[i, j]
-            #         )
-            #     weighted_average_factor_returns /= self.window_size
-            #     asset_ranks = np.argsort(np.argsort(weighted_average_factor_returns))
-            #     top_quintile = asset_ranks >= (len(asset_ranks) * 0.90)
-            #     bottom_quintile = asset_ranks <= (len(asset_ranks) * 0.10)
-            #     long_weights = np.ones(np.sum(top_quintile)) / np.sum(top_quintile)
-            #     short_weights = np.ones(np.sum(bottom_quintile)) / np.sum(
-            #         bottom_quintile
-            #     )
-            #     long_assets = test_returns.iloc[:, top_quintile]
-            #     short_assets = test_returns.iloc[:, bottom_quintile]
-            #     long_return += (
-            #         np.dot(long_assets.values.flatten(), long_weights) * weights[i]
-            #     )
-            #     short_return += (
-            #         np.dot(short_assets.values.flatten(), short_weights) * weights[i]
-            #     )
-            n, t = factor_specific.shape
-            time_weights = np.arange(1, t + 1)
-            time_weights = time_weights / np.sum(time_weights)
-            weighted_specific_factor = np.dot(factor_specific, time_weights)
-            average_specific_factor = np.mean(factor_specific, axis=1)
-            asset_ranks = np.argsort(np.argsort(weighted_specific_factor))
-            top_quintile = asset_ranks >= (len(asset_ranks) * 0.90)
-            bottom_quintile = asset_ranks <= (len(asset_ranks) * 0.10)
-            long_weights = np.ones(np.sum(top_quintile)) / np.sum(top_quintile)
-            short_weights = np.ones(np.sum(bottom_quintile)) / np.sum(bottom_quintile)
-            for i in range(factor_returns.shape[0]):
+            for i in range(factor_loadings.shape[1]):
+                weighted_average_factor_returns = np.zeros(factor_loadings.shape[0])
+                for j in range(factor_returns.shape[1]):
+                    weighted_average_factor_returns += (
+                        factor_loadings[:, i] * factor_returns[i, j]
+                    )
+                weighted_average_factor_returns /= self.window_size
+                asset_ranks = np.argsort(np.argsort(weighted_average_factor_returns))
+                top_quintile = asset_ranks >= (len(asset_ranks) * 0.90)
+                bottom_quintile = asset_ranks <= (len(asset_ranks) * 0.10)
+                long_weights = np.ones(np.sum(top_quintile)) / np.sum(top_quintile)
+                short_weights = np.ones(np.sum(bottom_quintile)) / np.sum(
+                    bottom_quintile
+                )
                 long_assets = test_returns.iloc[:, top_quintile]
                 short_assets = test_returns.iloc[:, bottom_quintile]
                 long_return += (
@@ -404,7 +385,7 @@ class RollingAPCAStrategy:
                 short_return += (
                     np.dot(short_assets.values.flatten(), short_weights) * weights[i]
                 )
-
+                
             portfolio_return = long_return - short_return
             transaction_costs = self.transaction_cost
             slippage_costs = self.slippage
