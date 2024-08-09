@@ -1,17 +1,17 @@
 import json
 import math
 
-import yfinance as yf
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
-
+import yfinance as yf
 from scipy.optimize import minimize
 from scipy.stats import norm
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit
+
 
 class StockData:
     def __init__(self, start_date, end_date):
@@ -27,40 +27,54 @@ class StockData:
         self.index_monthly_data = self.resample_data(self.index_data)
         self.returns = self.calculate_returns(self.monthly_data)
         self.index_returns = self.calculate_returns(self.index_monthly_data)
-        
+
     def load_tickers(self):
-        with open('Tickers.json', 'r') as json_file:
+        with open("Tickers.json", "r") as json_file:
             tickers_json = json.load(json_file)
-        return tickers_json['tickers']
-    
+        return tickers_json["tickers"]
+
     def download_data(self, tickers):
-        return yf.download(tickers, start=self.start_date, end=self.end_date, progress=False)['Open']
-    
+        return yf.download(
+            tickers, start=self.start_date, end=self.end_date, progress=False
+        )["Open"]
+
     def download_volume_data(self, tickers):
-        return yf.download(tickers, start=self.start_date, end=self.end_date, progress=False)['Volume']
-    
+        return yf.download(
+            tickers, start=self.start_date, end=self.end_date, progress=False
+        )["Volume"]
+
     def download_index_data(self, index_ticker):
-        return yf.download(index_ticker, start=self.start_date, end=self.end_date, progress=False)['Open']
-    
+        return yf.download(
+            index_ticker, start=self.start_date, end=self.end_date, progress=False
+        )["Open"]
+
     def resample_data(self, data):
-        return data.resample('ME').first()
-    
+        return data.resample("ME").first()
+
     def calculate_returns(self, data):
         return data.pct_change().dropna()
-    
+
 
 class CorrelationMatrix:
     def __init__(self, returns):
         self.returns = returns
         self.correlation_matrix = self.calculate_correlation_matrix()
-        
+
     def calculate_correlation_matrix(self):
         return self.returns.corr()
-    
+
     def plot_heatmap(self):
         plt.figure(figsize=(20, 16))
-        sns.heatmap(self.correlation_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, center=0, fmt='.1f')
-        plt.title('Correlation Heatmap of Returns')
+        sns.heatmap(
+            self.correlation_matrix,
+            annot=True,
+            cmap="coolwarm",
+            vmin=-1,
+            vmax=1,
+            center=0,
+            fmt=".1f",
+        )
+        plt.title("Correlation Heatmap of Returns")
         plt.show()
 
 
@@ -72,36 +86,50 @@ class ComponentsAnalysis:
         self.Q_tilde = self.calculate_covariance_matrix()
         self.eigenvalues, self.eigenvectors = self.perform_eigendecomposition()
         self.explained_variance_ratio = self.calculate_explained_variance_ratio()
-        self.cumulative_explained_variance = self.calculate_cumulative_explained_variance()
-    
+        self.cumulative_explained_variance = (
+            self.calculate_cumulative_explained_variance()
+        )
+
     def calculate_covariance_matrix(self):
-        return (1 / self.t) * self.R @ self.R.T #asset returns covariance matrix (in t x t not n x n, nello screenshot assume R che ha t come colonne)
-    
+        return (
+            (1 / self.t) * self.R @ self.R.T
+        )  # asset returns covariance matrix (in t x t not n x n, nello screenshot assume R che ha t come colonne)
+
     def perform_eigendecomposition(self):
         return np.linalg.eigh(self.Q_tilde)
-    
+
     def calculate_explained_variance_ratio(self):
         return self.eigenvalues[::-1] / np.sum(self.eigenvalues)
-    
+
     def calculate_cumulative_explained_variance(self):
         return np.cumsum(self.explained_variance_ratio)
-    
+
     def plot_scree(self):
         plt.figure(figsize=(20, 6))
-        plt.plot(np.arange(1, len(self.eigenvalues) + 1), self.eigenvalues[::-1], 'o-', markersize=8)
-        plt.xlabel('Principal Component')
-        plt.ylabel('Eigenvalue')
-        plt.title('Scree Plot')
+        plt.plot(
+            np.arange(1, len(self.eigenvalues) + 1),
+            self.eigenvalues[::-1],
+            "o-",
+            markersize=8,
+        )
+        plt.xlabel("Principal Component")
+        plt.ylabel("Eigenvalue")
+        plt.title("Scree Plot")
         plt.grid(True)
         plt.show()
-    
+
     def plot_cumulative_explained_variance(self):
         plt.figure(figsize=(20, 6))
-        plt.plot(np.arange(1, len(self.eigenvalues) + 1), self.cumulative_explained_variance, 'o-', markersize=8)
-        plt.xlabel('Number of Principal Components')
-        plt.ylabel('Cumulative Explained Variance')
-        plt.title('Cumulative Explained Variance')
-        plt.axhline(y=0.90, color='r', linestyle='--')
+        plt.plot(
+            np.arange(1, len(self.eigenvalues) + 1),
+            self.cumulative_explained_variance,
+            "o-",
+            markersize=8,
+        )
+        plt.xlabel("Number of Principal Components")
+        plt.ylabel("Cumulative Explained Variance")
+        plt.title("Cumulative Explained Variance")
+        plt.axhline(y=0.90, color="r", linestyle="--")
         plt.grid(True)
         plt.show()
 
@@ -116,37 +144,46 @@ class APCA:
         self.Q_tilde = self.calculate_covariance_matrix()
         self.eigenvalues, self.eigenvectors = self.perform_eigendecomposition()
         self.explained_variance_ratio = self.calculate_explained_variance_ratio()
-        self.cumulative_explained_variance = self.calculate_cumulative_explained_variance()
-        self.m = self.number_factors(0.90)
-        self.U_m_final, self.F_final, self.B_final = self.iterative_estimation()
-    
+        self.cumulative_explained_variance = (
+            self.calculate_cumulative_explained_variance()
+        )
+        self.m = self.number_factors(0.75)
+        self.U_m_final, self.F_final, self.B_final, self.Gamma_final = (
+            self.iterative_estimation()
+        )
+
     def calculate_covariance_matrix(self):
         return (1 / self.t) * self.R @ self.R.T
-    
+
     def perform_eigendecomposition(self):
         return np.linalg.eigh(self.Q_tilde)
-    
+
     def number_factors(self, threshold):
         return np.searchsorted(self.cumulative_explained_variance, threshold) + 1
-    
+
     def calculate_explained_variance_ratio(self):
         return self.eigenvalues[::-1] / np.sum(self.eigenvalues)
-    
+
     def calculate_cumulative_explained_variance(self):
         return np.cumsum(self.explained_variance_ratio)
-    
+
     def iterative_estimation(self):
         previous_Delta_squared = np.inf
 
         for iteration in range(self.max_iterations):
-            U_m = self.eigenvectors[:, -self.m:]
-            F = U_m.T # Factor returns
-            B = self.R.T @ U_m # Factor exposures
-            Gamma = self.R.T - B @ F # Specific returns
-            Delta_squared = (1 / self.t) * np.diag(Gamma @ Gamma.T) # Specific covariance matrix
+            U_m = self.eigenvectors[:, -self.m :]
+            F = U_m.T  # Factor returns
+            B = self.R.T @ U_m  # Factor exposures
+            Gamma = self.R.T - B @ F  # Specific returns
+            Delta_squared = (1 / self.t) * np.diag(
+                Gamma @ Gamma.T
+            )  # Specific covariance matrix
 
-            if np.all(np.abs(Delta_squared - previous_Delta_squared) < self.convergence_threshold):
-                #print(f"Converged after {iteration + 1} iterations")
+            if np.all(
+                np.abs(Delta_squared - previous_Delta_squared)
+                < self.convergence_threshold
+            ):
+                # print(f"Converged after {iteration + 1} iterations")
                 break
 
             previous_Delta_squared = Delta_squared
@@ -158,12 +195,13 @@ class APCA:
         else:
             print("Did not converge within the maximum number of iterations")
 
-        U_m_final = self.eigenvectors[:, -self.m:]
+        U_m_final = self.eigenvectors[:, -self.m :]
         F_final = U_m_final.T
         B_final = self.R.T @ U_m_final
+        Gamma_final = self.R.T - B_final @ F_final
 
-        return U_m_final, F_final, B_final
-    
+        return U_m_final, F_final, B_final, Gamma_final
+
 
 class PortfolioWeights:
     def __init__(self, factor_returns):
@@ -173,42 +211,46 @@ class PortfolioWeights:
         cov_matrix = np.cov(self.factor_returns.T)
         inv_vols = 1 / np.sqrt(np.diag(cov_matrix))
         initial_weights = inv_vols / np.sum(inv_vols)
-        
+
         def objective(weights):
             portfolio_vol = np.sqrt(weights.T @ cov_matrix @ weights)
             marginal_contrib = cov_matrix @ weights
             risk_contrib = weights * marginal_contrib
             return np.sum((risk_contrib - portfolio_vol / len(weights)) ** 2)
-        
-        constraints = [{'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1}]
+
+        constraints = [{"type": "eq", "fun": lambda weights: np.sum(weights) - 1}]
         bounds = [(0, 1) for _ in range(len(initial_weights))]
-        result = minimize(objective, initial_weights, bounds=bounds, constraints=constraints)
-        
+        result = minimize(
+            objective, initial_weights, bounds=bounds, constraints=constraints
+        )
+
         return result.x
-    
+
     def momentum_based_weights(self, lookback_period=4):
         momentum = np.mean(self.factor_returns[-lookback_period:], axis=0)
         positive_momentum = momentum.clip(min=0)
         weights = positive_momentum / np.sum(positive_momentum)
-        
+
         return weights
-    
+
     def tail_risk_parity_weights(self, alpha=0.05):
         cov_matrix = np.cov(self.factor_returns.T)
-        
+
         def objective(weights):
             portfolio_vol = np.sqrt(weights.T @ cov_matrix @ weights)
             tail_risks = norm.ppf(alpha) * np.sqrt(np.diag(cov_matrix))
             risk_contrib = weights * tail_risks
             return np.sum((risk_contrib - portfolio_vol / len(weights)) ** 2)
-        
+
         initial_weights = np.ones(len(cov_matrix)) / len(cov_matrix)
-        constraints = [{'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1}]
+        constraints = [{"type": "eq", "fun": lambda weights: np.sum(weights) - 1}]
         bounds = [(0, 1) for _ in range(len(initial_weights))]
-        result = minimize(objective, initial_weights, bounds=bounds, constraints=constraints)
-        
+        result = minimize(
+            objective, initial_weights, bounds=bounds, constraints=constraints
+        )
+
         return result.x
-    
+
     def random_forest_weights(self, random_seed=42):
         np.random.seed(random_seed)
         X = self.factor_returns[:-1]
@@ -216,9 +258,11 @@ class PortfolioWeights:
         tscv = TimeSeriesSplit(n_splits=5)
         val_mse_list = []
         train_mse_list = []
-        n_estimators_grid = [50, 100, 200, 500]
-        max_depth_grid = [5, 10, 15, None]      
-        best_val_mse = float('inf')
+        # n_estimators_grid = [5, 10, 20, 30, 40, 50]
+        # max_depth_grid = [5, 10, 20, 30, 40, 50]
+        n_estimators_grid = [50]
+        max_depth_grid = [1]
+        best_val_mse = float("inf")
         best_n_estimators = None
         best_max_depth = None
         for n_estimators in n_estimators_grid:
@@ -228,9 +272,11 @@ class PortfolioWeights:
                 for train_index, val_index in tscv.split(X):
                     X_train, X_val = X[train_index], X[val_index]
                     y_train, y_val = y[train_index], y[val_index]
-                    model = RandomForestRegressor(n_estimators=n_estimators, 
-                                                max_depth=max_depth, 
-                                                random_state=random_seed)
+                    model = RandomForestRegressor(
+                        n_estimators=n_estimators,
+                        max_depth=max_depth,
+                        random_state=random_seed,
+                    )
                     model.fit(X_train, y_train)
                     train_predictions = model.predict(X_train)
                     val_predictions = model.predict(X_val)
@@ -244,22 +290,37 @@ class PortfolioWeights:
                     best_n_estimators = n_estimators
                     best_max_depth = max_depth
 
-        best_model = RandomForestRegressor(n_estimators=best_n_estimators, 
-                                        max_depth=best_max_depth, 
-                                        random_state=random_seed)
+        best_model = RandomForestRegressor(
+            n_estimators=best_n_estimators,
+            max_depth=best_max_depth,
+            random_state=random_seed,
+        )
         best_model.fit(X, y)
-        #weights = model.predict(np.mean(X, axis=0).reshape(1, -1))[0]
+        # weights = model.predict(np.mean(X, axis=0).reshape(1, -1))[0]
         weights = best_model.feature_importances_
         weights = weights / np.sum(weights)
         return weights
 
 
 class RollingAPCAStrategy:
-    def __init__(self, data_returns, window_size, max_iterations, transaction_cost=0.001, slippage=0.001):
+    def __init__(
+        self,
+        data_returns,
+        window_size,
+        max_iterations,
+        transaction_cost=0.001,
+        slippage=0.001,
+    ):
         self.data_returns = data_returns
         self.window_size = window_size
         self.max_iterations = max_iterations
-        self.weight_methods = ['equal', 'risk_parity', 'momentum', 'tail_risk_parity', 'random_forest']
+        self.weight_methods = [
+            "equal",
+            "risk_parity",
+            "momentum",
+            "tail_risk_parity",
+            # "random_forest",
+        ]
         self.portfolio_returns_dict = {}
         self.transaction_cost = transaction_cost
         self.slippage = slippage
@@ -276,23 +337,24 @@ class RollingAPCAStrategy:
 
             end = start + self.window_size
             train_returns = self.data_returns.iloc[start:end]  # t x n
-            test_returns = self.data_returns.iloc[end:end + 1]
+            test_returns = self.data_returns.iloc[end : end + 1]
             factor_model = APCA(train_returns, max_iterations=self.max_iterations)
             factor_returns = factor_model.F_final  # m x t
             factor_loadings = factor_model.B_final  # n x m
+            factor_specific = factor_model.Gamma_final  # n x t
 
             portfolio_weights = PortfolioWeights(factor_returns)
-            
+
             # Select the weighting method
-            if weight_method == 'equal':
+            if weight_method == "equal":
                 weights = np.ones(factor_loadings.shape[1]) / factor_loadings.shape[1]
-            elif weight_method == 'risk_parity':
+            elif weight_method == "risk_parity":
                 weights = portfolio_weights.risk_parity_weights()
-            elif weight_method == 'momentum':
+            elif weight_method == "momentum":
                 weights = portfolio_weights.momentum_based_weights()
-            elif weight_method == 'tail_risk_parity':
+            elif weight_method == "tail_risk_parity":
                 weights = portfolio_weights.tail_risk_parity_weights(alpha=0.05)
-            elif weight_method == 'random_forest':
+            elif weight_method == "random_forest":
                 weights = portfolio_weights.random_forest_weights()
             else:
                 raise ValueError(f"Unknown weight method: {weight_method}")
@@ -300,21 +362,48 @@ class RollingAPCAStrategy:
             train_factor_returns.append(factor_returns)
             train_factor_loadings.append(factor_loadings)
             test_index.append(test_returns.index[0])
-            
-            for i in range(factor_loadings.shape[1]):
-                weighted_average_factor_returns = np.zeros(factor_loadings.shape[0])
-                for j in range(factor_returns.shape[1]):
-                    weighted_average_factor_returns += factor_loadings[:, i] * factor_returns[i, j]
-                weighted_average_factor_returns /= self.window_size
-                asset_ranks = np.argsort(np.argsort(weighted_average_factor_returns))
-                top_quintile = asset_ranks >= (len(asset_ranks) * 0.90)
-                bottom_quintile = asset_ranks <= (len(asset_ranks) * 0.10)
-                long_weights = np.ones(np.sum(top_quintile)) / np.sum(top_quintile)
-                short_weights = np.ones(np.sum(bottom_quintile)) / np.sum(bottom_quintile)
+
+            # for i in range(factor_loadings.shape[1]):
+            #     weighted_average_factor_returns = np.zeros(factor_loadings.shape[0])
+            #     for j in range(factor_returns.shape[1]):
+            #         weighted_average_factor_returns += (
+            #             factor_loadings[:, i] * factor_returns[i, j]
+            #         )
+            #     weighted_average_factor_returns /= self.window_size
+            #     asset_ranks = np.argsort(np.argsort(weighted_average_factor_returns))
+            #     top_quintile = asset_ranks >= (len(asset_ranks) * 0.90)
+            #     bottom_quintile = asset_ranks <= (len(asset_ranks) * 0.10)
+            #     long_weights = np.ones(np.sum(top_quintile)) / np.sum(top_quintile)
+            #     short_weights = np.ones(np.sum(bottom_quintile)) / np.sum(
+            #         bottom_quintile
+            #     )
+            #     long_assets = test_returns.iloc[:, top_quintile]
+            #     short_assets = test_returns.iloc[:, bottom_quintile]
+            #     long_return += (
+            #         np.dot(long_assets.values.flatten(), long_weights) * weights[i]
+            #     )
+            #     short_return += (
+            #         np.dot(short_assets.values.flatten(), short_weights) * weights[i]
+            #     )
+            n, t = factor_specific.shape
+            time_weights = np.arange(1, t + 1)
+            time_weights = time_weights / np.sum(time_weights)
+            weighted_specific_factor = np.dot(factor_specific, time_weights)
+            average_specific_factor = np.mean(factor_specific, axis=1)
+            asset_ranks = np.argsort(np.argsort(weighted_specific_factor))
+            top_quintile = asset_ranks >= (len(asset_ranks) * 0.90)
+            bottom_quintile = asset_ranks <= (len(asset_ranks) * 0.10)
+            long_weights = np.ones(np.sum(top_quintile)) / np.sum(top_quintile)
+            short_weights = np.ones(np.sum(bottom_quintile)) / np.sum(bottom_quintile)
+            for i in range(factor_returns.shape[0]):
                 long_assets = test_returns.iloc[:, top_quintile]
                 short_assets = test_returns.iloc[:, bottom_quintile]
-                long_return += np.dot(long_assets.values.flatten(), long_weights) * weights[i]
-                short_return += np.dot(short_assets.values.flatten(), short_weights) * weights[i]
+                long_return += (
+                    np.dot(long_assets.values.flatten(), long_weights) * weights[i]
+                )
+                short_return += (
+                    np.dot(short_assets.values.flatten(), short_weights) * weights[i]
+                )
 
             portfolio_return = long_return - short_return
             transaction_costs = self.transaction_cost
@@ -326,25 +415,42 @@ class RollingAPCAStrategy:
         return portfolio_returns_series
 
     def evaluate_strategies(self, index_returns):
-        index_returns_series = pd.Series(index_returns, index=self.data_returns.index[self.window_size:])
+        index_returns_series = pd.Series(
+            index_returns, index=self.data_returns.index[self.window_size :]
+        )
         portfolio_returns_dict = {}
 
         for method in self.weight_methods:
-            self.portfolio_returns_dict[method] = self.rolling_apca_strategy(weight_method=method)
-            portfolio_returns_dict[method] = self.portfolio_returns_dict[method].dropna()
+            self.portfolio_returns_dict[method] = self.rolling_apca_strategy(
+                weight_method=method
+            )
+            portfolio_returns_dict[method] = self.portfolio_returns_dict[
+                method
+            ].dropna()
 
         plt.figure(figsize=(12, 6))
         for method, returns in self.portfolio_returns_dict.items():
             cumulative_returns = (1 + returns).cumprod()
-            cumulative_returns = pd.Series([1] + cumulative_returns.tolist(), index=[self.data_returns.index[self.window_size-1]] + cumulative_returns.index.tolist())
-            plt.plot(cumulative_returns, label=f'Portfolio Returns ({method})')
+            cumulative_returns = pd.Series(
+                [1] + cumulative_returns.tolist(),
+                index=[self.data_returns.index[self.window_size - 1]]
+                + cumulative_returns.index.tolist(),
+            )
+            plt.plot(cumulative_returns, label=f"Portfolio Returns ({method})")
+
         cumulative_index_returns = (1 + index_returns_series).cumprod()
-        cumulative_index_returns = pd.Series([1] + cumulative_index_returns.tolist(), index=[self.data_returns.index[self.window_size-1]] + cumulative_index_returns.index.tolist())
-        plt.plot(cumulative_index_returns, label='Index Returns', linewidth=2, linestyle='--')
+        cumulative_index_returns = pd.Series(
+            [1] + cumulative_index_returns.tolist(),
+            index=[self.data_returns.index[self.window_size - 1]]
+            + cumulative_index_returns.index.tolist(),
+        )
+        plt.plot(
+            cumulative_index_returns, label="Index Returns", linewidth=2, linestyle="--"
+        )
         plt.xticks(rotation=45)
-        plt.xlabel('Date')
-        plt.ylabel('Cumulative Returns')
-        plt.title('Cumulative Returns of Portfolio vs Index')
+        plt.xlabel("Date")
+        plt.ylabel("Cumulative Returns")
+        plt.title("Cumulative Returns of Portfolio vs Index")
         plt.legend()
         plt.grid(True)
         plt.show()
@@ -353,13 +459,13 @@ class RollingAPCAStrategy:
         plt.figure(figsize=(12, 6))
         for method, returns in portfolio_returns_dict.items():
             drawdown = FinancialMetrics.drawdown(returns)["Drawdown"]
-            plt.plot(drawdown, label=f'Portfolio Drawdown ({method})')
+            plt.plot(drawdown, label=f"Portfolio Drawdown ({method})")
         index_drawdown = FinancialMetrics.drawdown(index_returns_series)["Drawdown"]
-        plt.plot(index_drawdown, label='Index Drawdown', linewidth=2, linestyle='--')
+        plt.plot(index_drawdown, label="Index Drawdown", linewidth=2, linestyle="--")
         plt.xticks(rotation=45)
-        plt.xlabel('Date')
-        plt.ylabel('Drawdown')
-        plt.title('Drawdowns of Portfolio vs Index')
+        plt.xlabel("Date")
+        plt.ylabel("Drawdown")
+        plt.title("Drawdowns of Portfolio vs Index")
         plt.legend()
         plt.grid(True)
         plt.show()
@@ -370,12 +476,22 @@ class RollingAPCAStrategy:
             returns_df.index = pd.to_datetime(returns_df.index)
             returns_df["Year"] = returns_df.index.year
             returns_df["Month"] = returns_df.index.month
-            monthly_returns = returns_df.pivot_table(index="Year", columns="Month", values="Returns", aggfunc='sum')
-            
-            sns.heatmap(monthly_returns, annot=True, fmt=".2%", cmap='RdYlGn', center=0, cbar=False, ax=ax)
+            monthly_returns = returns_df.pivot_table(
+                index="Year", columns="Month", values="Returns", aggfunc="sum"
+            )
+
+            sns.heatmap(
+                monthly_returns,
+                annot=True,
+                fmt=".2%",
+                cmap="RdYlGn",
+                center=0,
+                cbar=False,
+                ax=ax,
+            )
             ax.set_title(title)
-            ax.set_xlabel('Month')
-            ax.set_ylabel('Year')
+            ax.set_xlabel("Month")
+            ax.set_ylabel("Year")
 
         num_methods = len(portfolio_returns_dict)
         num_cols = 2
@@ -384,7 +500,9 @@ class RollingAPCAStrategy:
         axes = axes.flatten()
 
         for ax, (method, returns) in zip(axes, portfolio_returns_dict.items()):
-            monthly_returns_heatmap(returns, title=f'Monthly Returns for Portfolio ({method})', ax=ax)
+            monthly_returns_heatmap(
+                returns, title=f"Monthly Returns for Portfolio ({method})", ax=ax
+            )
 
         for i in range(len(portfolio_returns_dict), len(axes)):
             fig.delaxes(axes[i])
@@ -403,7 +521,7 @@ class FinancialMetrics:
 
     @staticmethod
     def risk_free_adjusted_returns(r, riskfree_rate, periods_per_year):
-        rf_per_period = (1 + riskfree_rate)**(1 / periods_per_year) - 1
+        rf_per_period = (1 + riskfree_rate) ** (1 / periods_per_year) - 1
         return r - rf_per_period
 
     @staticmethod
@@ -416,11 +534,9 @@ class FinancialMetrics:
         wealth_index = 1000 * (1 + return_series).cumprod()
         previous_peaks = wealth_index.cummax()
         drawdown = (wealth_index - previous_peaks) / previous_peaks
-        return pd.DataFrame({
-            "Wealth": wealth_index,
-            "Peaks": previous_peaks,
-            "Drawdown": drawdown
-            })
+        return pd.DataFrame(
+            {"Wealth": wealth_index, "Peaks": previous_peaks, "Drawdown": drawdown}
+        )
 
     @staticmethod
     def semideviation(r, periods_per_year):
@@ -428,7 +544,9 @@ class FinancialMetrics:
         Compute the Annualized Semi-Deviation
         """
         neg_rets = r[r < 0]
-        return FinancialMetrics.annualize_vol(r=neg_rets, periods_per_year=periods_per_year)
+        return FinancialMetrics.annualize_vol(
+            r=neg_rets, periods_per_year=periods_per_year
+        )
 
     @staticmethod
     def skewness(r):
@@ -475,10 +593,12 @@ class FinancialMetrics:
         if modified:
             s = FinancialMetrics.skewness(r)
             k = FinancialMetrics.kurtosis(r)
-            z = (z +
-                 (z**2 - 1) * s / 6 +
-                 (z**3 - 3 * z) * (k - 3) / 24 -
-                 (2 * z**3 - 5 * z) * (s**2) / 36)
+            z = (
+                z
+                + (z**2 - 1) * s / 6
+                + (z**3 - 3 * z) * (k - 3) / 24
+                - (2 * z**3 - 5 * z) * (s**2) / 36
+            )
         return -(r.mean() + z * r.std(ddof=0))
 
     @staticmethod
@@ -503,8 +623,8 @@ class FinancialMetrics:
         n_periods = r.shape[0]
         if compounded_growth <= 0:
             return 0
-        
-        return compounded_growth**(periods_per_year / n_periods) - 1
+
+        return compounded_growth ** (periods_per_year / n_periods) - 1
 
     @staticmethod
     def annualize_vol(r, periods_per_year):
@@ -518,7 +638,9 @@ class FinancialMetrics:
         """
         Computes the annualized Sharpe ratio of a set of returns
         """
-        excess_ret = FinancialMetrics.risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
+        excess_ret = FinancialMetrics.risk_free_adjusted_returns(
+            r, riskfree_rate, periods_per_year
+        )
         ann_ex_ret = FinancialMetrics.annualize_rets(excess_ret, periods_per_year)
         ann_vol = FinancialMetrics.annualize_vol(r, periods_per_year)
         return ann_ex_ret / ann_vol if ann_vol != 0 else 0
@@ -528,14 +650,21 @@ class FinancialMetrics:
         """
         Compute the Return on Value-at-Risk
         """
-        return FinancialMetrics.annualize_rets(r, periods_per_year=periods_per_year) / abs(FinancialMetrics.var_historic(r, level=level)) if abs(FinancialMetrics.var_historic(r, level=level)) > 1e-10 else 0
+        return (
+            FinancialMetrics.annualize_rets(r, periods_per_year=periods_per_year)
+            / abs(FinancialMetrics.var_historic(r, level=level))
+            if abs(FinancialMetrics.var_historic(r, level=level)) > 1e-10
+            else 0
+        )
 
     @staticmethod
     def sortino_ratio(r, riskfree_rate, periods_per_year):
         """
         Compute the annualized Sortino Ratio of a set of returns
         """
-        excess_ret = FinancialMetrics.risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
+        excess_ret = FinancialMetrics.risk_free_adjusted_returns(
+            r, riskfree_rate, periods_per_year
+        )
         ann_ex_ret = FinancialMetrics.annualize_rets(excess_ret, periods_per_year)
         neg_rets = excess_ret[excess_ret < 0]
         ann_vol = FinancialMetrics.annualize_vol(neg_rets, periods_per_year)
@@ -546,7 +675,9 @@ class FinancialMetrics:
         """
         Compute the annualized Calmar Ratio of a set of returns
         """
-        excess_ret = FinancialMetrics.risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
+        excess_ret = FinancialMetrics.risk_free_adjusted_returns(
+            r, riskfree_rate, periods_per_year
+        )
         ann_ex_ret = FinancialMetrics.annualize_rets(excess_ret, periods_per_year)
         max_dd = abs(FinancialMetrics.drawdown(r).Drawdown.min())
         return ann_ex_ret / max_dd if max_dd != 0 else 0
@@ -557,9 +688,11 @@ class FinancialMetrics:
         Compute the annualized Burke Ratio of a set of returns
         If "modified" is True, then the modified Burke Ratio is returned
         """
-        excess_ret = FinancialMetrics.risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
+        excess_ret = FinancialMetrics.risk_free_adjusted_returns(
+            r, riskfree_rate, periods_per_year
+        )
         ann_ex_ret = FinancialMetrics.annualize_rets(excess_ret, periods_per_year)
-        sum_dwn = np.sqrt(np.sum((FinancialMetrics.drawdown(r).Drawdown)**2))
+        sum_dwn = np.sqrt(np.sum((FinancialMetrics.drawdown(r).Drawdown) ** 2))
         if not modified:
             bk_ratio = ann_ex_ret / sum_dwn if sum_dwn != 0 else 0
         else:
@@ -592,7 +725,9 @@ class FinancialMetrics:
 
     @staticmethod
     def treynor_ratio(r, market, riskfree_rate, periods_per_year):
-        excess_ret = FinancialMetrics.risk_free_adjusted_returns(r, riskfree_rate, periods_per_year)
+        excess_ret = FinancialMetrics.risk_free_adjusted_returns(
+            r, riskfree_rate, periods_per_year
+        )
         ann_ex_ret = FinancialMetrics.annualize_rets(excess_ret, periods_per_year)
         beta = FinancialMetrics.beta(r, market)
         return ann_ex_ret / beta if beta != 0 else 0
@@ -613,19 +748,46 @@ class FinancialMetrics:
     def tail_ratio(r):
         tail_ratio = np.percentile(r, 95) / abs(np.percentile(r, 5))
         return tail_ratio
-    
+
     @staticmethod
     def summary_stats(r, market=None, riskfree_rate=0.03, periods_per_year=12):
         """
         Return a DataFrame that contains aggregated summary stats for the returns in the columns of r
         """
-        ann_r = FinancialMetrics.annualize(FinancialMetrics.annualize_rets, r, periods_per_year)
-        ann_vol = FinancialMetrics.annualize(FinancialMetrics.annualize_vol, r, periods_per_year)
-        semidev = FinancialMetrics.annualize(FinancialMetrics.semideviation, r, periods_per_year)
-        ann_sr = FinancialMetrics.annualize(FinancialMetrics.sharpe_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
-        ann_cr = FinancialMetrics.annualize(FinancialMetrics.calmar_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
-        ann_br = FinancialMetrics.annualize(FinancialMetrics.burke_ratio, r, periods_per_year, riskfree_rate=riskfree_rate, modified=True)
-        ann_sortr = FinancialMetrics.annualize(FinancialMetrics.sortino_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
+        ann_r = FinancialMetrics.annualize(
+            FinancialMetrics.annualize_rets, r, periods_per_year
+        )
+        ann_vol = FinancialMetrics.annualize(
+            FinancialMetrics.annualize_vol, r, periods_per_year
+        )
+        semidev = FinancialMetrics.annualize(
+            FinancialMetrics.semideviation, r, periods_per_year
+        )
+        ann_sr = FinancialMetrics.annualize(
+            FinancialMetrics.sharpe_ratio,
+            r,
+            periods_per_year,
+            riskfree_rate=riskfree_rate,
+        )
+        ann_cr = FinancialMetrics.annualize(
+            FinancialMetrics.calmar_ratio,
+            r,
+            periods_per_year,
+            riskfree_rate=riskfree_rate,
+        )
+        ann_br = FinancialMetrics.annualize(
+            FinancialMetrics.burke_ratio,
+            r,
+            periods_per_year,
+            riskfree_rate=riskfree_rate,
+            modified=True,
+        )
+        ann_sortr = FinancialMetrics.annualize(
+            FinancialMetrics.sortino_ratio,
+            r,
+            periods_per_year,
+            riskfree_rate=riskfree_rate,
+        )
         dd = r.aggregate(lambda r: FinancialMetrics.drawdown(r).Drawdown.min())
         skew = r.aggregate(FinancialMetrics.skewness)
         kurt = r.aggregate(FinancialMetrics.kurtosis)
@@ -633,39 +795,55 @@ class FinancialMetrics:
         cf_var5 = r.aggregate(FinancialMetrics.var_gaussian, modified=True)
         hist_cvar5 = r.aggregate(FinancialMetrics.cvar_historic)
         rovar5 = r.aggregate(FinancialMetrics.rovar, periods_per_year=periods_per_year)
-        np_wdd_ratio = r.aggregate(lambda returns: FinancialMetrics.net_profit(returns) / - FinancialMetrics.worst_drawdown(returns))
+        np_wdd_ratio = r.aggregate(
+            lambda returns: FinancialMetrics.net_profit(returns)
+            / -FinancialMetrics.worst_drawdown(returns)
+        )
         tail_ratio = r.aggregate(FinancialMetrics.tail_ratio)
         if market is not None:
             market_series = market.squeeze()
             beta = r.aggregate(FinancialMetrics.beta, market=market_series)
-            treynor = r.aggregate(FinancialMetrics.treynor_ratio, market=market_series, riskfree_rate=riskfree_rate, periods_per_year=periods_per_year)
-            tracking_err = r.aggregate(FinancialMetrics.tracking_error, market=market_series)
-            info_ratio = r.aggregate(FinancialMetrics.information_ratio, market=market_series, periods_per_year=periods_per_year)
+            treynor = r.aggregate(
+                FinancialMetrics.treynor_ratio,
+                market=market_series,
+                riskfree_rate=riskfree_rate,
+                periods_per_year=periods_per_year,
+            )
+            tracking_err = r.aggregate(
+                FinancialMetrics.tracking_error, market=market_series
+            )
+            info_ratio = r.aggregate(
+                FinancialMetrics.information_ratio,
+                market=market_series,
+                periods_per_year=periods_per_year,
+            )
         else:
             beta = pd.Series(1 * len(r.columns), index=r.columns)
             treynor = pd.Series(0 * len(r.columns), index=r.columns)
             tracking_err = pd.Series(0 * len(r.columns), index=r.columns)
             info_ratio = pd.Series(0 * len(r.columns), index=r.columns)
 
-        return pd.DataFrame({
-            "Annualized Return": round(ann_r, 4),
-            "Annualized Volatility": round(ann_vol, 4),
-            "Semi-Deviation": round(semidev, 4),
-            "Skewness": round(skew, 4),
-            "Kurtosis": round(kurt, 4),
-            "Historic VaR (5%)": round(hist_var5, 4),
-            "Cornish-Fisher VaR (5%)": round(cf_var5, 4),
-            "Historic CVaR (5%)": round(hist_cvar5, 4),
-            "Return on VaR": round(rovar5, 4),
-            "Sharpe Ratio": round(ann_sr, 4),
-            "Sortino Ratio": round(ann_sortr, 4),
-            "Calmar Ratio": round(ann_cr, 4),
-            "Modified Burke Ratio": round(ann_br, 4),
-            "Max Drawdown": round(dd, 4),
-            "Net Profit to Worst Drawdown": round(np_wdd_ratio, 4),
-            "Beta": round(beta, 4),
-            "Treynor Ratio": round(treynor, 4),
-            "Tracking Error": round(tracking_err, 4),
-            "Information Ratio": round(info_ratio, 4),
-            "Tail Ratio": round(tail_ratio, 4)
-        })
+        return pd.DataFrame(
+            {
+                "Annualized Return": round(ann_r, 4),
+                "Annualized Volatility": round(ann_vol, 4),
+                "Semi-Deviation": round(semidev, 4),
+                "Skewness": round(skew, 4),
+                "Kurtosis": round(kurt, 4),
+                "Historic VaR (5%)": round(hist_var5, 4),
+                "Cornish-Fisher VaR (5%)": round(cf_var5, 4),
+                "Historic CVaR (5%)": round(hist_cvar5, 4),
+                "Return on VaR": round(rovar5, 4),
+                "Sharpe Ratio": round(ann_sr, 4),
+                "Sortino Ratio": round(ann_sortr, 4),
+                "Calmar Ratio": round(ann_cr, 4),
+                "Modified Burke Ratio": round(ann_br, 4),
+                "Max Drawdown": round(dd, 4),
+                "Net Profit to Worst Drawdown": round(np_wdd_ratio, 4),
+                "Beta": round(beta, 4),
+                "Treynor Ratio": round(treynor, 4),
+                "Tracking Error": round(tracking_err, 4),
+                "Information Ratio": round(info_ratio, 4),
+                "Tail Ratio": round(tail_ratio, 4),
+            }
+        )
