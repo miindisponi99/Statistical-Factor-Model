@@ -1,16 +1,20 @@
 import json
 import math
+import pywt
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import yfinance as yf
+
+from dtaidistance import dtw
 from scipy.optimize import minimize
 from scipy.stats import norm
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit
+from statsmodels.regression.quantile_regression import QuantReg
 
 
 class StockData:
@@ -250,6 +254,173 @@ class PortfolioWeights:
         )
 
         return result.x
+    
+    def wavelet_weights(self, wavelet='haar'):
+        coeffs = pywt.dwt(self.factor_returns.T, wavelet)
+        approx, _ = coeffs
+        if len(approx.shape) > 1:
+            approx = np.mean(approx, axis=0)
+        weights = approx / np.sum(approx)
+        return weights
+
+    def minimum_correlation_weights(self):
+        corr_matrix = np.corrcoef(self.factor_returns.T)
+        initial_weights = np.ones(len(corr_matrix)) / len(corr_matrix)
+
+        def objective(weights):
+            weighted_corr = weights.T @ corr_matrix @ weights
+            return weighted_corr
+
+        constraints = [{"type": "eq", "fun": lambda weights: np.sum(weights) - 1}]
+        bounds = [(0, 1) for _ in range(len(initial_weights))]
+        result = minimize(
+            objective, initial_weights, bounds=bounds, constraints=constraints
+        )
+        return result.x
+
+    def minimum_variance_weights(self):
+        cov_matrix = np.cov(self.factor_returns.T)
+
+        def objective(weights):
+            portfolio_vol = np.sqrt(weights.T @ cov_matrix @ weights)
+            return portfolio_vol
+
+        initial_weights = np.ones(len(cov_matrix)) / len(cov_matrix)
+        constraints = [{"type": "eq", "fun": lambda weights: np.sum(weights) - 1}]
+        bounds = [(0, 1) for _ in range(len(initial_weights))]
+        result = minimize(
+            objective, initial_weights, bounds=bounds, constraints=constraints
+        )
+        return result.x
+
+    def spearman_ic_weights(self, lookback_period=12):
+        rank_returns = np.apply_along_axis(lambda x: np.argsort(np.argsort(x)), 0, self.factor_returns[-lookback_period:])
+        rank_avg_returns = np.mean(rank_returns, axis=0)
+        positive_rank_avg = rank_avg_returns.clip(min=0)
+        weights = positive_rank_avg / np.sum(positive_rank_avg)
+        return weights
+
+    def maximum_diversification_weights(self):
+        cov_matrix = np.cov(self.factor_returns.T)
+        volatilities = np.sqrt(np.diag(cov_matrix))
+
+        def objective(weights):
+            weighted_volatility = np.dot(weights, volatilities)
+            diversification_ratio = weighted_volatility / np.sqrt(weights.T @ cov_matrix @ weights)
+            return -diversification_ratio
+
+        initial_weights = np.ones(len(cov_matrix)) / len(cov_matrix)
+        constraints = [{"type": "eq", "fun": lambda weights: np.sum(weights) - 1}]
+        bounds = [(0, 1) for _ in range(len(initial_weights))]
+        result = minimize(
+            objective, initial_weights, bounds=bounds, constraints=constraints
+        )
+        return result.x
+
+    def maximum_sharpe_ratio_weights(self, risk_free_rate=0):
+        expected_returns = np.mean(self.factor_returns, axis=0)
+        cov_matrix = np.cov(self.factor_returns.T)
+
+        def objective(weights):
+            portfolio_return = np.dot(weights, expected_returns)
+            portfolio_volatility = np.sqrt(weights.T @ cov_matrix @ weights)
+            sharpe_ratio = (portfolio_return - risk_free_rate) / portfolio_volatility
+            return -sharpe_ratio
+
+        initial_weights = np.ones(len(cov_matrix)) / len(cov_matrix)
+        constraints = [{"type": "eq", "fun": lambda weights: np.sum(weights) - 1}]
+        bounds = [(0, 1) for _ in range(len(initial_weights))]
+        result = minimize(
+            objective, initial_weights, bounds=bounds, constraints=constraints
+        )
+        return result.x
+
+    def algo_complexity_weights(self):
+        def complexity_function(weights):
+            return np.count_nonzero(weights)
+
+        cov_matrix = np.cov(self.factor_returns.T)
+        initial_weights = np.ones(len(cov_matrix)) / len(cov_matrix)
+
+        def objective(weights):
+            portfolio_vol = np.sqrt(weights.T @ cov_matrix @ weights)
+            complexity_penalty = complexity_function(weights)
+            return portfolio_vol + complexity_penalty
+
+        constraints = [{"type": "eq", "fun": lambda weights: np.sum(weights) - 1}]
+        bounds = [(0, 1) for _ in range(len(initial_weights))]
+        result = minimize(
+            objective, initial_weights, bounds=bounds, constraints=constraints
+        )
+        return result.x
+    
+    def entropy_based_weights(self):
+        cov_matrix = np.cov(self.factor_returns.T)
+        
+        def entropy(weights):
+            return -np.sum(weights * np.log(weights))
+
+        constraints = [{"type": "eq", "fun": lambda weights: np.sum(weights) - 1}]
+        bounds = [(0, 1) for _ in range(len(cov_matrix))]
+        initial_weights = np.ones(len(cov_matrix)) / len(cov_matrix)
+        result = minimize(entropy, initial_weights, bounds=bounds, constraints=constraints)
+        return result.x
+
+    def kelly_criterion_weights(self):
+        mean_returns = np.mean(self.factor_returns, axis=0)
+        cov_matrix = np.cov(self.factor_returns.T)
+        inv_cov_matrix = np.linalg.inv(cov_matrix)
+        weights = inv_cov_matrix @ mean_returns
+        return weights / np.sum(weights)
+
+    def maximin_weights(self):
+        cov_matrix = np.cov(self.factor_returns.T)
+        
+        def objective(weights):
+            return -np.min(weights.T @ cov_matrix @ weights)
+        
+        constraints = [{"type": "eq", "fun": lambda weights: np.sum(weights) - 1}]
+        bounds = [(0, 1) for _ in range(len(cov_matrix))]
+        initial_weights = np.ones(len(cov_matrix)) / len(cov_matrix)
+        result = minimize(objective, initial_weights, bounds=bounds, constraints=constraints)
+        return result.x
+
+    def mean_absolute_deviation_weights(self):
+        abs_dev = np.mean(np.abs(self.factor_returns - np.mean(self.factor_returns, axis=0)), axis=0)
+        weights = 1 / abs_dev
+        return weights / np.sum(weights)
+
+    def quantile_regression_weights(self, quantile=0.5):
+        mean_returns = np.mean(self.factor_returns, axis=0)
+        if self.factor_returns.shape[0] != len(mean_returns):
+            mean_returns = np.mean(self.factor_returns, axis=1)
+        model = QuantReg(mean_returns, self.factor_returns)
+        res = model.fit(q=quantile)
+        weights = res.params
+        return weights / np.sum(weights)
+
+    def dtw_weights(self):
+        distances = np.array([dtw.distance(self.factor_returns[:, i], np.mean(self.factor_returns, axis=1)) for i in range(self.factor_returns.shape[1])])
+        weights = 1 / distances
+        return weights / np.sum(weights)
+    
+    def convex_optimization_weights(self):
+        cov_matrix = np.cov(self.factor_returns.T)
+
+        def objective(weights):
+            return np.sqrt(weights.T @ cov_matrix @ weights)
+
+        constraints = [{"type": "eq", "fun": lambda weights: np.sum(weights) - 1}]
+        bounds = [(0, 1) for _ in range(len(cov_matrix))]
+        initial_weights = np.ones(len(cov_matrix)) / len(cov_matrix)
+        result = minimize(objective, initial_weights, bounds=bounds, constraints=constraints)
+        return result.x
+
+    def stochastic_dominance_weights(self, order=1):
+        sorted_returns = np.sort(self.factor_returns, axis=0)
+        cumulative_returns = np.cumsum(sorted_returns, axis=0)
+        weights = np.mean(cumulative_returns, axis=0) ** order
+        return weights / np.sum(weights)  # Normalize to sum to 1
 
     def random_forest_weights(self, random_seed=42):
         np.random.seed(random_seed)
@@ -327,8 +498,24 @@ class RollingAPCAStrategy:
             "equal",
             "risk_parity",
             "momentum",
-            "tail_risk_parity",
-            "random_forest",
+            #"tail_risk_parity",
+            #"wavelet",
+            #"min_corr",
+            #"min_var",
+            #"spearman_ic",
+            #"max_div",
+            #"max_sr",
+            #"algo",
+            #"entropy",
+            #"kelly", 
+            #UNCOMMENTARE PERCHE RITORNO ASSURDO, BUONO SHARPE MA DRAWDOWN AL 48%
+            "maximin",
+            #"mad",
+            #"quantile",
+            #"dtw",
+            "stochastic",
+            #"convex"
+            #"random_forest"
         ]
         self.portfolio_returns_dict = {}
         self.transaction_cost = transaction_cost
@@ -363,6 +550,36 @@ class RollingAPCAStrategy:
                 weights = portfolio_weights.momentum_based_weights()
             elif weight_method == "tail_risk_parity":
                 weights = portfolio_weights.tail_risk_parity_weights(alpha=0.05)
+            elif weight_method == "wavelet":
+                weights = portfolio_weights.wavelet_weights()
+            elif weight_method == "min_corr":
+                weights = portfolio_weights.minimum_correlation_weights()
+            elif weight_method == "min_var":
+                weights = portfolio_weights.minimum_variance_weights()
+            elif weight_method == "spearman_ic":
+                weights = portfolio_weights.spearman_ic_weights()
+            elif weight_method == "max_div":
+                weights = portfolio_weights.maximum_diversification_weights()
+            elif weight_method == "max_sr":
+                weights = portfolio_weights.maximum_sharpe_ratio_weights()
+            elif weight_method == "algo":
+                weights = portfolio_weights.algo_complexity_weights()
+            elif weight_method == "entropy":
+                weights = portfolio_weights.entropy_based_weights()
+            elif weight_method == "kelly":
+                weights = portfolio_weights.kelly_criterion_weights()
+            elif weight_method == "maximin":
+                weights = portfolio_weights.maximin_weights()
+            elif weight_method == "mad":
+                weights = portfolio_weights.mean_absolute_deviation_weights()
+            elif weight_method == "quantile":
+                weights = portfolio_weights.quantile_regression_weights()
+            elif weight_method == "dtw":
+                weights = portfolio_weights.dtw_weights()
+            elif weight_method == "stochastic":
+                weights = portfolio_weights.stochastic_dominance_weights()
+            elif weight_method == "convex":
+                weights = portfolio_weights.convex_optimization_weights()
             elif weight_method == "random_forest":
                 weights = portfolio_weights.random_forest_weights()
             else:
