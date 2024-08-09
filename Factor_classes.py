@@ -147,7 +147,7 @@ class APCA:
         self.cumulative_explained_variance = (
             self.calculate_cumulative_explained_variance()
         )
-        self.m = self.number_factors(0.9)
+        self.m = self.number_factors(0.90)
         self.U_m_final, self.F_final, self.B_final, self.Gamma_final = (
             self.iterative_estimation()
         )
@@ -258,42 +258,42 @@ class PortfolioWeights:
         tscv = TimeSeriesSplit(n_splits=5)
         val_mse_list = []
         train_mse_list = []
-        # n_estimators_grid = [5, 10, 20, 30, 40, 50]
-        # max_depth_grid = [5, 10, 20, 30, 40, 50]
-        n_estimators_grid = [50]
-        max_depth_grid = [1]
+        n_estimators_grid = [5, 10, 20, 30, 40, 50]
+        max_depth_grid = [5, 10, 20, 30, 40, 50]
+        #n_estimators_grid = [50]
+        #max_depth_grid = [1]
         best_val_mse = float("inf")
         best_params = {}
 
         for n_estimators in n_estimators_grid:
             for max_depth in max_depth_grid:
-                for min_samples_split in min_samples_split_grid:
-                    val_mse_list = []
-                    train_mse_list = []
-                    for train_index, val_index in tscv.split(X):
-                        X_train, X_val = X[train_index], X[val_index]
-                        y_train, y_val = y[train_index], y[val_index]
-                        model = RandomForestRegressor(
-                            n_estimators=n_estimators,
-                            max_depth=max_depth,
-                            min_samples_split=min_samples_split,
-                            random_state=random_seed,
-                        )
-                        model.fit(X_train, y_train)
-                        train_predictions = model.predict(X_train)
-                        val_predictions = model.predict(X_val)
-                        train_mse = mean_squared_error(y_train, train_predictions)
-                        val_mse = mean_squared_error(y_val, val_predictions)
-                        train_mse_list.append(train_mse)
-                        val_mse_list.append(val_mse)
-                    mean_val_mse = np.mean(val_mse_list)
-                    if mean_val_mse < best_val_mse:
-                        best_val_mse = mean_val_mse
-                        best_params = {
-                            "n_estimators": n_estimators,
-                            "max_depth": max_depth,
-                            "min_samples_split": min_samples_split,
-                        }
+                #for min_samples_split in min_samples_split_grid:
+                val_mse_list = []
+                train_mse_list = []
+                for train_index, val_index in tscv.split(X):
+                    X_train, X_val = X[train_index], X[val_index]
+                    y_train, y_val = y[train_index], y[val_index]
+                    model = RandomForestRegressor(
+                        n_estimators=n_estimators,
+                        max_depth=max_depth,
+                        #min_samples_split=min_samples_split,
+                        random_state=random_seed,
+                    )
+                    model.fit(X_train, y_train)
+                    train_predictions = model.predict(X_train)
+                    val_predictions = model.predict(X_val)
+                    train_mse = mean_squared_error(y_train, train_predictions)
+                    val_mse = mean_squared_error(y_val, val_predictions)
+                    train_mse_list.append(train_mse)
+                    val_mse_list.append(val_mse)
+                mean_val_mse = np.mean(val_mse_list)
+                if mean_val_mse < best_val_mse:
+                    best_val_mse = mean_val_mse
+                    best_params = {
+                        "n_estimators": n_estimators,
+                        "max_depth": max_depth,
+                        #"min_samples_split": min_samples_split,
+                    }
 
         best_model = RandomForestRegressor(
             n_estimators=best_params["n_estimators"],
@@ -301,8 +301,6 @@ class PortfolioWeights:
             #min_samples_split=best_params["min_samples_split"],
             random_state=random_seed,
         )
-        print(best_n_estimators)
-        print(best_max_depth)
         best_model.fit(X, y)
 
         # Use feature importances as weights
@@ -330,7 +328,7 @@ class RollingAPCAStrategy:
             "risk_parity",
             "momentum",
             "tail_risk_parity",
-            # "random_forest",
+            "random_forest",
         ]
         self.portfolio_returns_dict = {}
         self.transaction_cost = transaction_cost
@@ -341,7 +339,6 @@ class RollingAPCAStrategy:
         train_factor_loadings = []
         test_index = []
         portfolio_returns = []
-        all_weights = []
 
         for start in range(len(self.data_returns) - self.window_size):
             long_return = 0
@@ -360,7 +357,6 @@ class RollingAPCAStrategy:
             # Select the weighting method
             if weight_method == "equal":
                 weights = np.ones(factor_loadings.shape[1]) / factor_loadings.shape[1]
-                print(f'')
             elif weight_method == "risk_parity":
                 weights = portfolio_weights.risk_parity_weights()
             elif weight_method == "momentum":
@@ -406,23 +402,21 @@ class RollingAPCAStrategy:
             portfolio_returns.append(net_portfolio_return)
 
         portfolio_returns_series = pd.Series(portfolio_returns, index=test_index)
-        return portfolio_returns_series, np.concatenate(all_weights, axis=0)
+        return portfolio_returns_series
 
     def evaluate_strategies(self, index_returns):
         index_returns_series = pd.Series(
             index_returns, index=self.data_returns.index[self.window_size :]
         )
         portfolio_returns_dict = {}
-        weights_dict = {}
 
         for method in self.weight_methods:
-            self.portfolio_returns_dict[method], weights_dict[method] = self.rolling_apca_strategy(
+            self.portfolio_returns_dict[method] = self.rolling_apca_strategy(
                 weight_method=method
             )
             portfolio_returns_dict[method] = self.portfolio_returns_dict[
                 method
             ].dropna()
-    
 
         plt.figure(figsize=(12, 6))
         for method, returns in self.portfolio_returns_dict.items():
@@ -502,23 +496,6 @@ class RollingAPCAStrategy:
 
         for i in range(len(portfolio_returns_dict), len(axes)):
             fig.delaxes(axes[i])
-
-        plt.tight_layout()
-        plt.show()
-
-        # Weights Distribution
-        plt.figure(figsize=(18, 12))
-        num_methods = len(self.weight_methods)
-        num_cols = 2
-        num_rows = math.ceil(num_methods / num_cols)
-        fig, axes = plt.subplots(num_rows, num_cols, figsize=(18, 6 * num_rows))
-        axes = axes.flatten()
-
-        for i, method in enumerate(self.weight_methods):
-            sns.boxplot(data=weights_dict[method], ax=axes[i])
-            axes[i].set_title(f"Distribution of Weights for {method}")
-            axes[i].set_xlabel("Factor/Asset")
-            axes[i].set_ylabel("Weight")
 
         plt.tight_layout()
         plt.show()
