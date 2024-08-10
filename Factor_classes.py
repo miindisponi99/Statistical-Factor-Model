@@ -969,10 +969,8 @@ class FinancialMetrics:
                 "Modified Burke Ratio": round(ann_br, 4),
                 "Max Drawdown": round(dd, 4),
                 "Net Profit to Worst Drawdown": round(np_wdd_ratio, 4),
-                "Beta": round(beta, 4),
-                "Treynor Ratio": round(treynor, 4),
                 "Tracking Error": round(tracking_err, 4),
                 "Information Ratio": round(info_ratio, 4),
-                "Tail Ratio": round(tail_ratio, 4),
+                "Tail Ratio": round(tail_ratio, 4)
             }
         )
