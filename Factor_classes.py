@@ -907,21 +907,6 @@ class FinancialMetrics:
         return drawdown.min()
 
     @staticmethod
-    def beta(r, market):
-        cov_matrix = np.cov(r, market)
-        beta = cov_matrix[0, 1] / cov_matrix[1, 1]
-        return beta
-
-    @staticmethod
-    def treynor_ratio(r, market, riskfree_rate, periods_per_year):
-        excess_ret = FinancialMetrics.risk_free_adjusted_returns(
-            r, riskfree_rate, periods_per_year
-        )
-        ann_ex_ret = FinancialMetrics.annualize_rets(excess_ret, periods_per_year)
-        beta = FinancialMetrics.beta(r, market)
-        return ann_ex_ret / beta if beta != 0 else 0
-
-    @staticmethod
     def tracking_error(r, market):
         difference = r - market
         return difference.std()
@@ -943,40 +928,13 @@ class FinancialMetrics:
         """
         Return a DataFrame that contains aggregated summary stats for the returns in the columns of r
         """
-        ann_r = FinancialMetrics.annualize(
-            FinancialMetrics.annualize_rets, r, periods_per_year
-        )
-        ann_vol = FinancialMetrics.annualize(
-            FinancialMetrics.annualize_vol, r, periods_per_year
-        )
-        semidev = FinancialMetrics.annualize(
-            FinancialMetrics.semideviation, r, periods_per_year
-        )
-        ann_sr = FinancialMetrics.annualize(
-            FinancialMetrics.sharpe_ratio,
-            r,
-            periods_per_year,
-            riskfree_rate=riskfree_rate,
-        )
-        ann_cr = FinancialMetrics.annualize(
-            FinancialMetrics.calmar_ratio,
-            r,
-            periods_per_year,
-            riskfree_rate=riskfree_rate,
-        )
-        ann_br = FinancialMetrics.annualize(
-            FinancialMetrics.burke_ratio,
-            r,
-            periods_per_year,
-            riskfree_rate=riskfree_rate,
-            modified=True,
-        )
-        ann_sortr = FinancialMetrics.annualize(
-            FinancialMetrics.sortino_ratio,
-            r,
-            periods_per_year,
-            riskfree_rate=riskfree_rate,
-        )
+        ann_r = FinancialMetrics.annualize(FinancialMetrics.annualize_rets, r, periods_per_year)
+        ann_vol = FinancialMetrics.annualize(FinancialMetrics.annualize_vol, r, periods_per_year)
+        semidev = FinancialMetrics.annualize(FinancialMetrics.semideviation, r, periods_per_year)
+        ann_sr = FinancialMetrics.annualize(FinancialMetrics.sharpe_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
+        ann_cr = FinancialMetrics.annualize(FinancialMetrics.calmar_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
+        ann_br = FinancialMetrics.annualize(FinancialMetrics.burke_ratio, r, periods_per_year, riskfree_rate=riskfree_rate, modified=True)
+        ann_sortr = FinancialMetrics.annualize(FinancialMetrics.sortino_ratio, r, periods_per_year, riskfree_rate=riskfree_rate)
         dd = r.aggregate(lambda r: FinancialMetrics.drawdown(r).Drawdown.min())
         skew = r.aggregate(FinancialMetrics.skewness)
         kurt = r.aggregate(FinancialMetrics.kurtosis)
@@ -984,31 +942,13 @@ class FinancialMetrics:
         cf_var5 = r.aggregate(FinancialMetrics.var_gaussian, modified=True)
         hist_cvar5 = r.aggregate(FinancialMetrics.cvar_historic)
         rovar5 = r.aggregate(FinancialMetrics.rovar, periods_per_year=periods_per_year)
-        np_wdd_ratio = r.aggregate(
-            lambda returns: FinancialMetrics.net_profit(returns)
-            / -FinancialMetrics.worst_drawdown(returns)
-        )
+        np_wdd_ratio = r.aggregate(lambda returns: FinancialMetrics.net_profit(returns) / -FinancialMetrics.worst_drawdown(returns))
         tail_ratio = r.aggregate(FinancialMetrics.tail_ratio)
         if market is not None:
             market_series = market.squeeze()
-            beta = r.aggregate(FinancialMetrics.beta, market=market_series)
-            treynor = r.aggregate(
-                FinancialMetrics.treynor_ratio,
-                market=market_series,
-                riskfree_rate=riskfree_rate,
-                periods_per_year=periods_per_year,
-            )
-            tracking_err = r.aggregate(
-                FinancialMetrics.tracking_error, market=market_series
-            )
-            info_ratio = r.aggregate(
-                FinancialMetrics.information_ratio,
-                market=market_series,
-                periods_per_year=periods_per_year,
-            )
+            tracking_err = r.aggregate(FinancialMetrics.tracking_error, market=market_series)
+            info_ratio = r.aggregate(FinancialMetrics.information_ratio, market=market_series, periods_per_year=periods_per_year)
         else:
-            beta = pd.Series(1 * len(r.columns), index=r.columns)
-            treynor = pd.Series(0 * len(r.columns), index=r.columns)
             tracking_err = pd.Series(0 * len(r.columns), index=r.columns)
             info_ratio = pd.Series(0 * len(r.columns), index=r.columns)
 
