@@ -522,23 +522,20 @@ class RollingAPCAStrategy:
         self.slippage = slippage
 
     def rolling_apca_strategy(self, weight_method):
-        train_factor_returns = []
-        train_factor_loadings = []
         test_index = []
         portfolio_returns = []
 
         for start in range(len(self.data_returns) - self.window_size):
             long_return = 0
             short_return = 0
-
             end = start + self.window_size
             train_returns = self.data_returns.iloc[start:end]  # t x n
             test_returns = self.data_returns.iloc[end : end + 1]
+            test_index.append(test_returns.index[0])
             factor_model = APCA(train_returns, max_iterations=self.max_iterations)
             factor_returns = factor_model.F_final  # m x t
             factor_loadings = factor_model.B_final  # n x m
-            factor_specific = factor_model.Gamma_final  # n x t
-
+            #factor_specific = factor_model.Gamma_final  # n x t
             portfolio_weights = PortfolioWeights(factor_returns.T)
             
             # Select the weighting method
@@ -585,37 +582,22 @@ class RollingAPCAStrategy:
             else:
                 raise ValueError(f"Unknown weight method: {weight_method}")
 
-            train_factor_returns.append(factor_returns)
-            train_factor_loadings.append(factor_loadings)
-            test_index.append(test_returns.index[0])
-
             for i in range(factor_loadings.shape[1]):
                 weighted_average_factor_returns = np.zeros(factor_loadings.shape[0])
                 for j in range(factor_returns.shape[1]):
-                    weighted_average_factor_returns += (
-                        factor_loadings[:, i] * factor_returns[i, j]
-                    )
+                    weighted_average_factor_returns += (factor_loadings[:, i] * factor_returns[i, j])
                 weighted_average_factor_returns /= self.window_size
                 asset_ranks = np.argsort(np.argsort(weighted_average_factor_returns))
                 top_quintile = asset_ranks >= (len(asset_ranks) * 0.90)
                 bottom_quintile = asset_ranks <= (len(asset_ranks) * 0.10)
                 long_weights = np.ones(np.sum(top_quintile)) / np.sum(top_quintile)
-                short_weights = np.ones(np.sum(bottom_quintile)) / np.sum(
-                    bottom_quintile
-                )
+                short_weights = np.ones(np.sum(bottom_quintile)) / np.sum(bottom_quintile)
                 long_assets = test_returns.iloc[:, top_quintile]
                 short_assets = test_returns.iloc[:, bottom_quintile]
-                long_return += (
-                    np.dot(long_assets.values.flatten(), long_weights) * weights[i]
-                )
-                short_return += (
-                    np.dot(short_assets.values.flatten(), short_weights) * weights[i]
-                )
+                long_return += (np.dot(long_assets.values.flatten(), long_weights) * weights[i])
+                short_return += (np.dot(short_assets.values.flatten(), short_weights) * weights[i])
                 
-            portfolio_return = long_return - short_return
-            transaction_costs = self.transaction_cost
-            slippage_costs = self.slippage
-            net_portfolio_return = portfolio_return - transaction_costs - slippage_costs
+            net_portfolio_return = (long_return - short_return) - self.transaction_cost - self.slippage
             portfolio_returns.append(net_portfolio_return)
 
         portfolio_returns_series = pd.Series(portfolio_returns, index=test_index)
