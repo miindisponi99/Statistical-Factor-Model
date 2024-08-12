@@ -28,7 +28,7 @@ class StockData:
         self.tickers = self.load_tickers()
         self.data = self.download_data(self.tickers)
         self.volume_data = self.download_volume_data(self.tickers)
-        self.index_data = self.download_index_data(self.index_ticker)
+        self.index_data = self.download_data(self.index_ticker)
         self.monthly_data = self.resample_data(self.data)
         self.monthly_volume_data = self.resample_data(self.volume_data)
         self.index_monthly_data = self.resample_data(self.index_data)
@@ -49,11 +49,6 @@ class StockData:
         return yf.download(
             tickers, start=self.start_date, end=self.end_date, progress=False
         )["Volume"]
-
-    def download_index_data(self, index_ticker):
-        return yf.download(
-            index_ticker, start=self.start_date, end=self.end_date, progress=False
-        )["Open"]
 
     def resample_data(self, data):
         return data.resample("ME").first()
@@ -141,38 +136,16 @@ class ComponentsAnalysis:
         plt.show()
 
 
-class APCA:
+class APCA(ComponentsAnalysis):
     def __init__(self, returns, convergence_threshold=1e-3, max_iterations=1000):
-        self.returns = returns
-        self.R = returns.values
-        self.t, self.n = returns.shape
+        super().__init__(returns)
         self.convergence_threshold = convergence_threshold
         self.max_iterations = max_iterations
-        self.Q_tilde = self.calculate_covariance_matrix()
-        self.eigenvalues, self.eigenvectors = self.perform_eigendecomposition()
-        self.explained_variance_ratio = self.calculate_explained_variance_ratio()
-        self.cumulative_explained_variance = (
-            self.calculate_cumulative_explained_variance()
-        )
         self.m = self.number_factors(0.90)
-        self.U_m_final, self.F_final, self.B_final, self.Gamma_final = (
-            self.iterative_estimation()
-        )
-
-    def calculate_covariance_matrix(self):
-        return (1 / self.t) * self.R @ self.R.T
-
-    def perform_eigendecomposition(self):
-        return np.linalg.eigh(self.Q_tilde)
+        self.U_m_final, self.F_final, self.B_final, self.Gamma_final = self.iterative_estimation()
 
     def number_factors(self, threshold):
         return np.searchsorted(self.cumulative_explained_variance, threshold) + 1
-
-    def calculate_explained_variance_ratio(self):
-        return self.eigenvalues[::-1] / np.sum(self.eigenvalues)
-
-    def calculate_cumulative_explained_variance(self):
-        return np.cumsum(self.explained_variance_ratio)
 
     def iterative_estimation(self):
         previous_Delta_squared = np.inf
@@ -604,6 +577,7 @@ class PortfolioWeights:
         #weights = weights / np.sum(np.abs(weights))
         return weights, best_model_params, best_train_mse, best_val_mse_per_split
 
+
 class RollingAPCAStrategy:
     def __init__(
         self,
@@ -751,20 +725,20 @@ class RollingAPCAStrategy:
             avg_best_params = pd.DataFrame(rf_best_params_list).mean().to_dict()
             avg_best_train_mse = np.mean(rf_best_train_mse_list)
             avg_best_val_mse = np.mean(rf_best_val_mse_list)
-            print('Random Forest')
-            print("Average Best Params:", avg_best_params)
-            print("Average Best Train MSE:", avg_best_train_mse)
-            print("Average Best Validation MSE:", avg_best_val_mse)
-            print('----------')
+            #print('Random Forest')
+            #print("Average Best Params:", avg_best_params)
+            #print("Average Best Train MSE:", avg_best_train_mse)
+            #print("Average Best Validation MSE:", avg_best_val_mse)
+            #print('----------')
         elif weight_method == "gradient_boosting":
             avg_best_params = pd.DataFrame(gb_best_params_list).mean().to_dict()
             avg_best_train_mse = np.mean(gb_best_train_mse_list)
             avg_best_val_mse = np.mean(gb_best_val_mse_list)
-            print('Gradient Boosting')
-            print("Average Best Params:", avg_best_params)
-            print("Average Best Train MSE:", avg_best_train_mse)
-            print("Average Best Validation MSE:", avg_best_val_mse)
-            print('----------')
+            #print('Gradient Boosting')
+            #print("Average Best Params:", avg_best_params)
+            #print("Average Best Train MSE:", avg_best_train_mse)
+            #print("Average Best Validation MSE:", avg_best_val_mse)
+            #print('----------')
         elif weight_method == "regression":
             regression_methods = [params['method'] for params in lr_best_params_list]
             alphas = [params['alpha'] for params in lr_best_params_list if params['method'] != 'regular']
@@ -772,11 +746,11 @@ class RollingAPCAStrategy:
             avg_alpha = np.mean(alphas) if alphas else None
             avg_best_train_mse = np.mean(lr_best_train_mse_list)
             avg_best_val_mse = np.mean(lr_best_val_mse_list)
-            print('Regression')
-            print("Average Best Params:", {'method': most_common_method, 'alpha': avg_alpha})
-            print("Average Best Train MSE:", avg_best_train_mse)
-            print("Average Best Validation MSE:", avg_best_val_mse)
-            print('----------')
+            #print('Regression')
+            #print("Average Best Params:", {'method': most_common_method, 'alpha': avg_alpha})
+            #print("Average Best Train MSE:", avg_best_train_mse)
+            #print("Average Best Validation MSE:", avg_best_val_mse)
+            #print('----------')
         portfolio_returns_series = pd.Series(portfolio_returns, index=test_index)
         return portfolio_returns_series
 
