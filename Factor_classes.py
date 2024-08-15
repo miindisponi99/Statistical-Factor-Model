@@ -11,13 +11,19 @@ import yfinance as yf
 from dtaidistance import dtw
 from scipy.optimize import minimize
 from scipy.stats import norm
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor
 from sklearn.multioutput import MultiOutputRegressor
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, Input
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit
 from statsmodels.regression.quantile_regression import QuantReg
 from collections import Counter
+from contextlib import redirect_stdout, redirect_stderr
+import io
 
 
 class StockData:
@@ -419,7 +425,6 @@ class PortfolioWeights:
                     for train_index, val_index in tscv.split(X):
                         X_train, X_val = X[train_index], X[val_index]
                         y_train, y_val = y[train_index], y[val_index]
-                        #print(y_train.shape)
                         model = RandomForestRegressor(
                             n_estimators=n_estimators,
                             max_depth=max_depth,
@@ -445,6 +450,114 @@ class PortfolioWeights:
                         }
 
         best_model = RandomForestRegressor(
+            n_estimators=best_params["n_estimators"],
+            max_depth=best_params["max_depth"],
+            min_samples_split=best_params["min_samples_split"],
+            random_state=random_seed,
+        )
+        best_model.fit(X, y)
+        weights = best_model.feature_importances_
+        weights = weights / np.sum(weights)
+        return weights, best_params, best_train_mse, best_val_mse_per_split
+
+    def neural_network_weights(self, random_seed=42):
+        np.random.seed(random_seed)
+        X = self.factor_returns[:-1]
+        y = self.factor_returns[1:]
+        tscv = TimeSeriesSplit(n_splits=3)
+        learning_rate_grid = [0.01, 0.001, 0.0001]
+        layer_configurations = [(20,), (30, 15)]
+        regularization = [0.01, 0.001]
+        best_val_mse = float("inf")
+        best_params = {}
+
+        for learning_rate in learning_rate_grid:
+            for layers in layer_configurations:
+                for reg in regularization:
+                    for train_index, val_index in tscv.split(X):
+                        model = Sequential()
+                        X_train, X_val = X[train_index], X[val_index]
+                        y_train, y_val = y[train_index], y[val_index]
+                        model.add(Input(shape=(X_train.shape[1],)))
+                        model.add(Dense(layers[0], activation='relu', kernel_regularizer='l2'))
+                        for size in layers[1:]:
+                            model.add(Dense(size, activation='relu', kernel_regularizer='l2'))
+                        model.add(Dense(y_train.shape[1]))
+                        model.compile(optimizer=Adam(learning_rate=learning_rate), loss='mean_squared_error')
+                        early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+                        model.fit(X_train, y_train, epochs=100, validation_data=(X_val, y_val), 
+                                callbacks=[early_stopping], verbose=0)
+                        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                            val_predictions = model.predict(X_val)
+                        val_mse = mean_squared_error(y_val, val_predictions)
+                        if val_mse < best_val_mse:
+                            best_val_mse = val_mse
+                            best_params = {
+                                'learning_rate': learning_rate,
+                                'layers': layers,
+                                'regularization': reg
+                            }
+        best_model = Sequential()
+        best_model.add(Input(shape=(X.shape[1],)))
+        for i, layer_size in enumerate(best_params['layers']):
+            if i < len(best_params['layers']) - 1:
+                best_model.add(Dense(layer_size, activation='relu', kernel_regularizer='l2'))
+                best_model.add(Dropout(0.5))
+            else:
+                best_model.add(Dense(layer_size, activation='relu', kernel_regularizer='l2'))
+        best_model.add(Dense(y.shape[1]))
+        best_model.compile(optimizer=Adam(best_params['learning_rate']), loss='mean_squared_error')
+        best_model.fit(X, y, epochs=100, verbose=0)
+        first_layer_weights = best_model.layers[0].get_weights()[0]
+        feature_importances = np.mean(np.abs(first_layer_weights), axis=1)
+        normalized_importances = feature_importances / np.sum(feature_importances)
+        return normalized_importances
+
+    
+    def extra_trees_weights(self, random_seed=42):
+        np.random.seed(random_seed)
+        X = self.factor_returns[:-1]
+        y = self.factor_returns[1:]
+        tscv = TimeSeriesSplit(n_splits=3)
+        n_estimators_grid = [10, 20, 30, 40, 50]
+        max_depth_grid = [3, 5, 10, 20]
+        min_samples_split_grid = [2, 3, 5]
+        best_val_mse = float("inf")
+        best_params = {}
+
+        for n_estimators in n_estimators_grid:
+            for max_depth in max_depth_grid:
+                for min_samples_split in min_samples_split_grid:
+                    val_mse_list = []
+                    train_mse_list = []
+                    for train_index, val_index in tscv.split(X):
+                        X_train, X_val = X[train_index], X[val_index]
+                        y_train, y_val = y[train_index], y[val_index]
+                        model = ExtraTreesRegressor(
+                            n_estimators=n_estimators,
+                            max_depth=max_depth,
+                            min_samples_split=min_samples_split,
+                            random_state=random_seed,
+                        )
+                        model.fit(X_train, y_train)
+                        train_predictions = model.predict(X_train)
+                        val_predictions = model.predict(X_val)
+                        train_mse = mean_squared_error(y_train, train_predictions)
+                        val_mse = mean_squared_error(y_val, val_predictions)
+                        train_mse_list.append(train_mse)
+                        val_mse_list.append(val_mse)
+                    mean_val_mse = np.mean(val_mse_list)
+                    if mean_val_mse < best_val_mse:
+                        best_val_mse = mean_val_mse
+                        best_train_mse = train_mse_list
+                        best_val_mse_per_split = val_mse_list
+                        best_params = {
+                            "n_estimators": n_estimators,
+                            "max_depth": max_depth,
+                            "min_samples_split": min_samples_split,
+                        }
+
+        best_model = ExtraTreesRegressor(
             n_estimators=best_params["n_estimators"],
             max_depth=best_params["max_depth"],
             min_samples_split=best_params["min_samples_split"],
@@ -613,7 +726,9 @@ class RollingAPCAStrategy:
             #"convex"
             #"random_forest",
             # "regression",
-            "gradient_boosting"
+            # "gradient_boosting",
+            # "extra_trees",
+            "neural_network"
         ]
         self.portfolio_returns_dict = {}
         self.transaction_cost = transaction_cost
@@ -628,6 +743,10 @@ class RollingAPCAStrategy:
         gb_best_params_list = []
         gb_best_train_mse_list = []
         gb_best_val_mse_list = []
+        et_best_params_list = []
+        et_best_train_mse_list = []
+        et_best_val_mse_list = []
+        nn_best_params_list = []
         lr_best_params_list = []
         lr_best_train_mse_list = []
         lr_best_val_mse_list = []
@@ -694,6 +813,15 @@ class RollingAPCAStrategy:
                 gb_best_params_list.append(best_params)
                 gb_best_train_mse_list.extend(best_train_mse)
                 gb_best_val_mse_list.extend(best_val_mse_per_split)
+            elif weight_method == "extra_trees":
+                weights, best_params, best_train_mse, best_val_mse_per_split = portfolio_weights.extra_trees_weights()
+                et_best_params_list.append(best_params)
+                et_best_train_mse_list.extend(best_train_mse)
+                et_best_val_mse_list.extend(best_val_mse_per_split)
+            elif weight_method == "neural_network":
+                weights = portfolio_weights.neural_network_weights()
+                # weights, best_params = portfolio_weights.neural_network_weights()
+                # nn_best_params_list.append(best_params)
             elif weight_method == "regression":
                 weights, best_params, best_train_mse, best_val_mse_per_split = portfolio_weights.regression_weights()
                 lr_best_params_list.append(best_params)
@@ -734,11 +862,25 @@ class RollingAPCAStrategy:
             avg_best_params = pd.DataFrame(gb_best_params_list).mean().to_dict()
             avg_best_train_mse = np.mean(gb_best_train_mse_list)
             avg_best_val_mse = np.mean(gb_best_val_mse_list)
-            #print('Gradient Boosting')
-            #print("Average Best Params:", avg_best_params)
-            #print("Average Best Train MSE:", avg_best_train_mse)
-            #print("Average Best Validation MSE:", avg_best_val_mse)
-            #print('----------')
+            # print('Gradient Boosting')
+            # print("Average Best Params:", avg_best_params)
+            # print("Average Best Train MSE:", avg_best_train_mse)
+            # print("Average Best Validation MSE:", avg_best_val_mse)
+            # print('----------')
+        elif weight_method == "extra_trees":
+            avg_best_params = pd.DataFrame(et_best_params_list).mean().to_dict()
+            avg_best_train_mse = np.mean(et_best_train_mse_list)
+            avg_best_val_mse = np.mean(et_best_val_mse_list)
+            print('Extra Trees')
+            print("Average Best Params:", avg_best_params)
+            print("Average Best Train MSE:", avg_best_train_mse)
+            print("Average Best Validation MSE:", avg_best_val_mse)
+            print('----------')
+        # elif weight_method == "neural_network":
+        #     avg_best_params = pd.DataFrame(nn_best_params_list).mean().to_dict()
+        #     print('Neural Network')
+        #     print("Average Best Params:", avg_best_params)
+        #     print('----------')
         elif weight_method == "regression":
             regression_methods = [params['method'] for params in lr_best_params_list]
             alphas = [params['alpha'] for params in lr_best_params_list if params['method'] != 'regular']
