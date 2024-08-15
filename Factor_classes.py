@@ -1,6 +1,7 @@
 import json
 import math
 import pywt
+import io
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,17 +14,16 @@ from scipy.optimize import minimize
 from scipy.stats import norm
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor
 from sklearn.multioutput import MultiOutputRegressor
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, Input
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.models import Sequential # type: ignore
+from tensorflow.keras.layers import Dense, Dropout, Input # type: ignore
+from tensorflow.keras.optimizers import Adam # type: ignore
+from tensorflow.keras.callbacks import EarlyStopping # type: ignore
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit
 from statsmodels.regression.quantile_regression import QuantReg
 from collections import Counter
 from contextlib import redirect_stdout, redirect_stderr
-import io
 
 
 class StockData:
@@ -402,7 +402,7 @@ class PortfolioWeights:
         sorted_returns = np.sort(self.factor_returns, axis=0)
         cumulative_returns = np.cumsum(sorted_returns, axis=0)
         weights = np.mean(cumulative_returns, axis=0) ** order
-        return weights / np.sum(weights)  # Normalize to sum to 1
+        return weights / np.sum(weights)
 
     def random_forest_weights(self, random_seed=42):
         np.random.seed(random_seed)
@@ -513,7 +513,6 @@ class PortfolioWeights:
         normalized_importances = feature_importances / np.sum(feature_importances)
         return normalized_importances
 
-    
     def extra_trees_weights(self, random_seed=42):
         np.random.seed(random_seed)
         X = self.factor_returns[:-1]
@@ -626,8 +625,8 @@ class PortfolioWeights:
         ))
         best_model.fit(X, y)
         weights = np.mean([estimator.feature_importances_ for estimator in best_model.estimators_], axis=0)
-        # weights = best_model.feature_importances_ 
-        weights = weights / np.sum(weights)  # Normalize weights
+        #weights = best_model.feature_importances_ 
+        weights = weights / np.sum(weights)
         return weights, best_params, best_train_mse, best_val_mse_per_split
     
     def regression_weights(self, random_seed=42):
@@ -637,7 +636,6 @@ class PortfolioWeights:
         tscv = TimeSeriesSplit(n_splits=3)
         best_val_mse = float("inf")
         best_model_params = {}
-        
         methods = ['regular', 'ridge']
         alpha_values = [0.01, 0.1, 1.0, 10.0, 100.0]
         
@@ -716,8 +714,7 @@ class RollingAPCAStrategy:
             #"max_sr",
             #"algo",
             #"entropy",
-            #"kelly", 
-            #UNCOMMENTARE PERCHE RITORNO ASSURDO, BUONO SHARPE MA DRAWDOWN AL 48%
+            #"kelly",
             "maximin",
             #"mad",
             #"quantile",
@@ -725,10 +722,10 @@ class RollingAPCAStrategy:
             "stochastic",
             #"convex"
             #"random_forest",
-            # "regression",
-            # "gradient_boosting",
-            # "extra_trees",
-            "neural_network"
+            #"regression",
+            "gradient_boosting",
+            #"extra_trees",
+            #"neural_network"
         ]
         self.portfolio_returns_dict = {}
         self.transaction_cost = transaction_cost
@@ -764,7 +761,6 @@ class RollingAPCAStrategy:
             #factor_specific = factor_model.Gamma_final  # n x t
             portfolio_weights = PortfolioWeights(factor_returns.T)
             
-            # Select the weighting method
             if weight_method == "equal":
                 weights = np.ones(factor_loadings.shape[1]) / factor_loadings.shape[1]
             elif weight_method == "risk_parity":
@@ -820,8 +816,8 @@ class RollingAPCAStrategy:
                 et_best_val_mse_list.extend(best_val_mse_per_split)
             elif weight_method == "neural_network":
                 weights = portfolio_weights.neural_network_weights()
-                # weights, best_params = portfolio_weights.neural_network_weights()
-                # nn_best_params_list.append(best_params)
+                #weights, best_params = portfolio_weights.neural_network_weights()
+                #nn_best_params_list.append(best_params)
             elif weight_method == "regression":
                 weights, best_params, best_train_mse, best_val_mse_per_split = portfolio_weights.regression_weights()
                 lr_best_params_list.append(best_params)
@@ -848,7 +844,6 @@ class RollingAPCAStrategy:
             net_portfolio_return = (long_return - short_return) - self.transaction_cost - self.slippage
             portfolio_returns.append(net_portfolio_return)
 
-        
         if weight_method == "random_forest":
             avg_best_params = pd.DataFrame(rf_best_params_list).mean().to_dict()
             avg_best_train_mse = np.mean(rf_best_train_mse_list)
@@ -862,25 +857,25 @@ class RollingAPCAStrategy:
             avg_best_params = pd.DataFrame(gb_best_params_list).mean().to_dict()
             avg_best_train_mse = np.mean(gb_best_train_mse_list)
             avg_best_val_mse = np.mean(gb_best_val_mse_list)
-            # print('Gradient Boosting')
-            # print("Average Best Params:", avg_best_params)
-            # print("Average Best Train MSE:", avg_best_train_mse)
-            # print("Average Best Validation MSE:", avg_best_val_mse)
-            # print('----------')
+            #print('Gradient Boosting')
+            #print("Average Best Params:", avg_best_params)
+            #print("Average Best Train MSE:", avg_best_train_mse)
+            #print("Average Best Validation MSE:", avg_best_val_mse)
+            #print('----------')
         elif weight_method == "extra_trees":
             avg_best_params = pd.DataFrame(et_best_params_list).mean().to_dict()
             avg_best_train_mse = np.mean(et_best_train_mse_list)
             avg_best_val_mse = np.mean(et_best_val_mse_list)
-            print('Extra Trees')
-            print("Average Best Params:", avg_best_params)
-            print("Average Best Train MSE:", avg_best_train_mse)
-            print("Average Best Validation MSE:", avg_best_val_mse)
-            print('----------')
-        # elif weight_method == "neural_network":
-        #     avg_best_params = pd.DataFrame(nn_best_params_list).mean().to_dict()
-        #     print('Neural Network')
-        #     print("Average Best Params:", avg_best_params)
-        #     print('----------')
+            #print('Extra Trees')
+            #print("Average Best Params:", avg_best_params)
+            #print("Average Best Train MSE:", avg_best_train_mse)
+            #print("Average Best Validation MSE:", avg_best_val_mse)
+            #print('----------')
+        elif weight_method == "neural_network":
+            avg_best_params = pd.DataFrame(nn_best_params_list).mean().to_dict()
+            #print('Neural Network')
+            #print("Average Best Params:", avg_best_params)
+            #print('----------')
         elif weight_method == "regression":
             regression_methods = [params['method'] for params in lr_best_params_list]
             alphas = [params['alpha'] for params in lr_best_params_list if params['method'] != 'regular']
