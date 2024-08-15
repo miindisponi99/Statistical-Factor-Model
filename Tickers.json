@@ -1,0 +1,14 @@
+{
+    "tickers": [
+      "ENI.MI", "ISP.MI", "UCG.MI", "SRG.MI", "PST.MI",
+      "PRY.MI", "G.MI", "RACE.MI", "ENEL.MI",
+      "TEN.MI", "MONC.MI", "UNI.MI",
+      "FBK.MI", "CPR.MI", "INW.MI", "BAMI.MI", "BMED.MI",
+      "BPE.MI", "AMP.MI", "BMPS.MI", "A2A.MI",
+      "BC.MI", "DIA.MI", "HER.MI", "TIT.MI",
+      "SPM.MI", "IP.MI", "MB.MI",
+      "IG.MI", "LDO.MI", "REC.MI",
+      "STLAM.MI", "STMMI.MI", "TRN.MI", 
+      "AZM.MI", "BPSO.MI", "ERG.MI"
+    ]
+  }
