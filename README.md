@@ -32,7 +32,11 @@ This comprehensive evaluation provides a clear decision framework for investors,
 
 ## Repository Structure
 
-- **Factor_classes.py**: this Python script contains all the necessary classes and functions for the project. It includes methods for loading tickers, downloading data, performing APCA, and evaluating portfolios.
+- **models**: this folder includes different Python files with classes about financial metrics, data loading, portfolio weights, and APCA structure.
+
+- **theory**: several screenshot are shared in this folder to better understand the theory behind the statistical factor model strategy using Asymptotic Principal Component Analysis.
+
+- **RollingStrategy.py**: this Python script contains the necessary class for the rolling APCA strategy. It includes methods for performing APCA, and evaluating portfolios.
 
 - **Stat_factor_model.ipynb**: open this Jupyter notebook to run the analysis. It provides a comprehensive visual interface for assessing performance over time, viewing drawdowns, and examining summary statistics.
 
