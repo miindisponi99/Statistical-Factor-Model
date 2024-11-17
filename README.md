@@ -3,9 +3,6 @@
 ## Project Overview
 This project explores the application of Asymptotic Principal Component Analysis (APCA) in creating a statistical factor model aimed at enhancing investment strategies in the Italian stock market, specifically targeting outperformance against the FTSEMIB Index. The initiative bridges sophisticated statistical methodologies with actionable investment tactics to improve portfolio management through deeper insights into asset behavior.
 
-### Core Approach
-APCA is employed to address the challenges posed by high-dimensional datasets commonly found in financial markets, where the number of assets often surpasses the number of observable time periods. This analysis technique adapts the traditional Principal Component Analysis (PCA) framework to focus on time periods rather than assets. This shift enables more stable and accurate estimation of the covariance matrix, which is critical for identifying the key factors that influence asset returns.
-
 ### Portfolio Strategy Development
 APCA is employed to address the challenges posed by high-dimensional datasets commonly found in financial markets, where the number of assets often surpasses the number of observable time periods. This analysis technique adapts the traditional Principal Component Analysis (PCA) framework to focus on time periods rather than assets. This shift enables more stable and accurate estimation of the covariance matrix, which is critical for identifying the key factors that influence asset returns.
 
